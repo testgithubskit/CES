@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List
 from decimal import Decimal
 from pydantic import BaseModel
+from io import BytesIO
 
 from app.database.session import get_db
 from app.core.dependencies import get_current_user
 from app.core.rbac import require_admin_or_user
 from app.services.cost_service import CostCalculationService
+from app.storage.minio_service import minio_service
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/cost-estimation", tags=["Cost Estimation Download"])
@@ -26,19 +27,23 @@ class CostDownloadRequest(BaseModel):
     additional_costs: List[AdditionalCostItem] = []
 
 
-@router.post("/download")
+class CostDownloadResponse(BaseModel):
+    url: str
+    filename: str
+
+
+@router.post("/download", response_model=CostDownloadResponse)
 def download_cost_sheet(
     request: CostDownloadRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_user)
 ):
     """
-    Generate and download a detailed cost sheet as Excel file.
+    Generate a detailed cost sheet as Excel file, upload to MinIO, and return presigned URL.
     Uses the same calculation service as the calculate endpoint.
     """
     import openpyxl
     from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-    from io import BytesIO
     from datetime import datetime
     
     # Validate customer exists
@@ -227,10 +232,34 @@ def download_cost_sheet(
     wb.save(output)
     output.seek(0)
     
+    # Generate filename
     filename = f"Cost_Estimation_{product.product_number}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    # Upload to MinIO
+    try:
+        object_name = minio_service.generate_object_name(filename)
+        file_path = minio_service.upload_file(
+            file_data=output,
+            original_filename=filename,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            object_name=object_name
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload cost sheet to MinIO: {str(e)}"
+        )
+    
+    # Generate presigned URL
+    try:
+        url = minio_service.get_file_url(object_name, expires_in_hours=24)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate presigned URL: {str(e)}"
+        )
+    
+    return CostDownloadResponse(
+        url=url,
+        filename=filename
     )

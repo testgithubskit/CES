@@ -175,38 +175,7 @@ def get_document(
     return document
 
 
-@router.get("/{document_id}/download")
-def download_document(
-    document_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Download a document file from MinIO.
-    """
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
-    
-    # Extract object name from file_path
-    object_name = document.file_path
-    
-    try:
-        file_content = minio_service.download_file(object_name)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to download file from MinIO: {str(e)}"
-        )
-    
-    return Response(
-        content=file_content,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename={document.file_name}"}
-    )
+
 
 
 @router.get("/{document_id}/url")

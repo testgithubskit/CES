@@ -35,10 +35,10 @@ export function Sidebar() {
   }
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center border-b px-6">
+    <div className="flex h-full w-64 flex-col border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex h-16 items-center border-b border-gray-200 px-6 dark:border-gray-700">
         <h1 className="text-xl font-bold text-brand-500">CES</h1>
-        <span className="ml-2 text-sm text-muted-foreground">Cost Estimation</span>
+        <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Cost Estimation</span>
       </div>
       <nav className="flex-1 space-y-1 p-4">
         <div className="space-y-1">
@@ -52,7 +52,7 @@ export function Sidebar() {
                   'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                   isActive(item.href)
                     ? 'bg-brand-500 text-white'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -62,7 +62,7 @@ export function Sidebar() {
           })}
         </div>
         <div className="mt-6 space-y-1">
-          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase">Configuration</p>
+          <p className="px-3 text-xs font-semibold text-gray-500 uppercase dark:text-gray-400">Configuration</p>
           {configNavigation.map((item) => {
             const Icon = item.icon
             return (
@@ -73,7 +73,7 @@ export function Sidebar() {
                   'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                   isActive(item.href)
                     ? 'bg-brand-500 text-white'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 )}
               >
                 <Icon className="h-5 w-5" />

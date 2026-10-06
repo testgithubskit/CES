@@ -1,121 +1,65 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ThemeProvider } from './hooks/use-theme'
+import { AuthProvider } from './hooks/use-auth'
+import { Toaster } from './components/ui/toaster'
+import { ProtectedRoute } from './components/common/ProtectedRoute'
+import { PublicLayout } from './layouts/PublicLayout'
+import { AuthenticatedLayout } from './layouts/AuthenticatedLayout'
+import { SignIn } from './pages/SignIn'
+import { SignUp } from './pages/SignUp'
+import { Dashboard } from './pages/Dashboard'
+import { Products } from './pages/Products'
+import { ProductDetail } from './pages/ProductDetail'
+import { PartDetail } from './pages/PartDetail'
+import { BOM } from './pages/BOM'
+import { ProcessPlan } from './pages/ProcessPlan'
+import { WorkCenters } from './pages/WorkCenters'
+import { Machines } from './pages/Machines'
+import { Customers } from './pages/Customers'
+import { MHRConfiguration } from './pages/MHRConfiguration'
+import { CostEstimation } from './pages/CostEstimation'
+import { CostBreakdown } from './pages/CostBreakdown'
+import { NotFound } from './pages/NotFound'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <Routes>
+            <Route element={<PublicLayout />}>
+              <Route path="/signin" element={<SignIn />} />
+              <Route path="/signup" element={<SignUp />} />
+            </Route>
 
-      <div className="ticks"></div>
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AuthenticatedLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/products/:id" element={<ProductDetail />} />
+              <Route path="/parts/:id" element={<PartDetail />} />
+              <Route path="/bom" element={<BOM />} />
+              <Route path="/process-plan" element={<ProcessPlan />} />
+              <Route path="/configuration/work-centers" element={<WorkCenters />} />
+              <Route path="/configuration/machines" element={<Machines />} />
+              <Route path="/configuration/customers" element={<Customers />} />
+              <Route path="/configuration/mhr" element={<MHRConfiguration />} />
+              <Route path="/cost-estimation" element={<CostEstimation />} />
+              <Route path="/cost-estimation/:productId/:calculationId" element={<CostBreakdown />} />
+            </Route>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          <Toaster />
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   )
 }
 

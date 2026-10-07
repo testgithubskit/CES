@@ -12,7 +12,7 @@ import { Lock, Mail, User, ArrowRight, CheckCircle, XCircle } from 'lucide-react
 export function SignUp() {
   const [formData, setFormData] = useState({
     email: '',
-    full_name: '',
+    name: '',
     password: '',
     confirm_password: '',
   })
@@ -28,8 +28,19 @@ export function SignUp() {
       return
     }
 
-    if (formData.password.length < 8) {
-      toast.error('Password must be at least 8 characters long')
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters long')
+      return
+    }
+
+    // Password validation: must include uppercase, lowercase, number, and special character
+    const hasUpperCase = /[A-Z]/.test(formData.password)
+    const hasLowerCase = /[a-z]/.test(formData.password)
+    const hasNumber = /[0-9]/.test(formData.password)
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+      toast.error('Password must include uppercase, lowercase, number, and special character')
       return
     }
 
@@ -38,7 +49,7 @@ export function SignUp() {
     try {
       await register({
         email: formData.email,
-        full_name: formData.full_name,
+        name: formData.name,
         password: formData.password,
       })
       toast.success('Account created successfully')
@@ -54,7 +65,11 @@ export function SignUp() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const passwordStrength = formData.password.length >= 8
+  const hasUpperCase = /[A-Z]/.test(formData.password)
+  const hasLowerCase = /[a-z]/.test(formData.password)
+  const hasNumber = /[0-9]/.test(formData.password)
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
+  const passwordStrength = formData.password.length >= 6 && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar
   const passwordsMatch = formData.password === formData.confirm_password && formData.password !== ''
 
   return (
@@ -79,16 +94,17 @@ export function SignUp() {
               transition={{ delay: 0.1 }}
               className="space-y-2"
             >
-              <Label htmlFor="full_name" className="text-sm font-medium">Full Name</Label>
+              <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <Input
-                  id="full_name"
-                  name="full_name"
+                  id="name"
+                  name="name"
                   type="text"
                   placeholder="John Doe"
                   required
-                  value={formData.full_name}
+                  maxLength={50}
+                  value={formData.name}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
                 />
@@ -109,6 +125,7 @@ export function SignUp() {
                   type="email"
                   placeholder="name@example.com"
                   required
+                  maxLength={50}
                   value={formData.email}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
@@ -129,6 +146,7 @@ export function SignUp() {
                   name="password"
                   type="password"
                   required
+                  maxLength={6}
                   value={formData.password}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
@@ -144,7 +162,7 @@ export function SignUp() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Password must be at least 8 characters long
+                Password must be at least 6 characters with uppercase, lowercase, number, and special character
               </p>
             </motion.div>
             <motion.div
@@ -161,6 +179,7 @@ export function SignUp() {
                   name="confirm_password"
                   type="password"
                   required
+                  maxLength={6}
                   value={formData.confirm_password}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"

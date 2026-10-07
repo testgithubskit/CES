@@ -47,7 +47,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(login_data: UserLogin, db: Session = Depends(get_db)):
     """
-    Authenticate user and return JWT access token.
+    Authenticate user and return JWT access token with user details.
     """
     # Find user by email
     user = db.query(User).filter(User.email == login_data.email).first()
@@ -56,29 +56,32 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
-    
+
     # Verify password
     if not verify_password(login_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
-    
+
     # Check if user is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
         )
-    
+
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id), "role": user.role},
         expires_delta=access_token_expires
     )
-    
-    return Token(access_token=access_token, token_type="bearer")
+
+    # Convert user to UserResponse
+    user_response = UserResponse.model_validate(user)
+
+    return Token(access_token=access_token, token_type="bearer", user=user_response)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -87,3 +90,12 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
     Get current authenticated user information.
     """
     return current_user
+
+
+@router.post("/logout")
+def logout():
+    """
+    Logout endpoint. For JWT-based auth, logout is handled client-side by removing the token.
+    This endpoint exists for API consistency.
+    """
+    return {"message": "Successfully logged out"}

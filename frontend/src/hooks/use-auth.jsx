@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { authService } from '../services/api/auth'
+import { toast } from 'sonner'
 
 const AuthContext = createContext()
 
@@ -47,8 +48,11 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await authService.logout()
+      toast.success('Logged out successfully')
     } catch (error) {
+      // Logout proceeds even if backend call fails
       console.error('Logout error:', error)
+      toast.success('Logged out successfully')
     } finally {
       localStorage.removeItem('token')
       setUser(null)

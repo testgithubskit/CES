@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
-import { LogOut, User } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 export function Header() {
   const { user, logout } = useAuth()
@@ -35,23 +35,20 @@ export function Header() {
             <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
               <Avatar className="h-10 w-10">
                 <AvatarFallback className="bg-brand-500 text-white">
-                  {getInitials(user?.full_name || user?.email)}
+                  {getInitials(user?.name || user?.email)}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{user?.full_name || 'User'}</p>
-                <p className="text-xs leading-none text-gray-500 dark:text-gray-400">{user?.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
+                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200">
+                  {user?.role || 'User'}
+                </span>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="hover:bg-gray-100 dark:hover:bg-gray-700">
-              <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="hover:bg-gray-100 dark:hover:bg-gray-700">
               <LogOut className="mr-2 h-4 w-4" />

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './hooks/use-theme'
 import { AuthProvider } from './hooks/use-auth'
-import { Toaster } from './components/ui/toaster'
+import { Toaster } from 'sonner'
 import { ProtectedRoute } from './components/common/ProtectedRoute'
 import { PublicLayout } from './layouts/PublicLayout'
 import { AuthenticatedLayout } from './layouts/AuthenticatedLayout'
@@ -56,7 +56,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-          <Toaster />
+          <Toaster position="top-right" richColors />
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

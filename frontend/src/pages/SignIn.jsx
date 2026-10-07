@@ -68,6 +68,7 @@ export function SignIn() {
                   type="email"
                   placeholder="name@example.com"
                   required
+                  maxLength={50}
                   value={formData.email}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
@@ -88,13 +89,14 @@ export function SignIn() {
                   name="password"
                   type="password"
                   required
+                  maxLength={6}
                   value={formData.password}
                   onChange={handleChange}
                   className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Password must be at least 8 characters long
+                Password must be at least 6 characters with uppercase, lowercase, number, and special character
               </p>
             </motion.div>
             <motion.div

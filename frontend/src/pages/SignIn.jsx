@@ -27,7 +27,9 @@ export function SignIn() {
       toast.success('Signed in successfully')
       navigate('/dashboard')
     } catch (error) {
-      toast.error('Failed to sign in. Please check your credentials.')
+      const detail = error.response?.data?.detail
+      const message = typeof detail === 'string' ? detail : 'Failed to sign in. Please check your credentials.'
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -89,6 +91,7 @@ export function SignIn() {
                   name="password"
                   type="password"
                   required
+                  minLength={6}
                   maxLength={6}
                   value={formData.password}
                   onChange={handleChange}
@@ -96,7 +99,7 @@ export function SignIn() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Password must be at least 6 characters with uppercase, lowercase, number, and special character
+                Password must be exactly 6 characters
               </p>
             </motion.div>
             <motion.div

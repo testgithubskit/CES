@@ -28,19 +28,8 @@ export function SignUp() {
       return
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters long')
-      return
-    }
-
-    // Password validation: must include uppercase, lowercase, number, and special character
-    const hasUpperCase = /[A-Z]/.test(formData.password)
-    const hasLowerCase = /[a-z]/.test(formData.password)
-    const hasNumber = /[0-9]/.test(formData.password)
-    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
-
-    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
-      toast.error('Password must include uppercase, lowercase, number, and special character')
+    if (formData.password.length !== 6) {
+      toast.error('Password must be exactly 6 characters')
       return
     }
 
@@ -51,11 +40,14 @@ export function SignUp() {
         email: formData.email,
         name: formData.name,
         password: formData.password,
+        role: 'user',
       })
       toast.success('Account created successfully')
       navigate('/signin')
     } catch (error) {
-      toast.error('Failed to create account. Please try again.')
+      const detail = error.response?.data?.detail
+      const message = typeof detail === 'string' ? detail : 'Failed to create account. Please try again.'
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -65,11 +57,7 @@ export function SignUp() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const hasUpperCase = /[A-Z]/.test(formData.password)
-  const hasLowerCase = /[a-z]/.test(formData.password)
-  const hasNumber = /[0-9]/.test(formData.password)
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password)
-  const passwordStrength = formData.password.length >= 6 && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar
+  const passwordValid = formData.password.length === 6
   const passwordsMatch = formData.password === formData.confirm_password && formData.password !== ''
 
   return (
@@ -146,6 +134,7 @@ export function SignUp() {
                   name="password"
                   type="password"
                   required
+                  minLength={6}
                   maxLength={6}
                   value={formData.password}
                   onChange={handleChange}
@@ -153,7 +142,7 @@ export function SignUp() {
                 />
                 {formData.password && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    {passwordStrength ? (
+                    {passwordValid ? (
                       <CheckCircle className="w-5 h-5 text-green-500" />
                     ) : (
                       <XCircle className="w-5 h-5 text-red-500" />
@@ -162,7 +151,7 @@ export function SignUp() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Password must be at least 6 characters with uppercase, lowercase, number, and special character
+                Password must be exactly 6 characters
               </p>
             </motion.div>
             <motion.div
@@ -179,6 +168,7 @@ export function SignUp() {
                   name="confirm_password"
                   type="password"
                   required
+                  minLength={6}
                   maxLength={6}
                   value={formData.confirm_password}
                   onChange={handleChange}

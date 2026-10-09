@@ -11,7 +11,8 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=6, max_length=6)
+    role: str = Field(default="user", min_length=1, max_length=50)
 
 
 class UserUpdate(BaseModel):
@@ -19,7 +20,7 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     role: Optional[str] = Field(None, min_length=1, max_length=50)
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(None, min_length=8)
+    password: Optional[str] = Field(None, min_length=6, max_length=6)
 
 
 class UserResponse(UserBase):

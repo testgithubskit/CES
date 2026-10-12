@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react'
 import { TableHead } from '../ui/table'
 
 export function useTableTools(rows, searchKeys) {
@@ -56,12 +56,12 @@ export function TableSearch({ value, onChange, placeholder = 'Search' }) {
 
 export function SortHead({ label, column, sort, onSort, className = '' }) {
   const active = sort.key === column
-  const Icon = sort.direction === 'desc' ? ArrowDown : ArrowUp
+  const Icon = !active ? ArrowUpDown : sort.direction === 'desc' ? ArrowDown : ArrowUp
   return (
     <TableHead className={className}>
       <button type="button" className="inline-flex items-center gap-1" onClick={() => onSort(column)}>
         {label}
-        {active && <Icon className="h-3 w-3" />}
+        <Icon className={`h-3 w-3 ${active ? 'text-foreground' : 'text-muted-foreground'}`} />
       </button>
     </TableHead>
   )

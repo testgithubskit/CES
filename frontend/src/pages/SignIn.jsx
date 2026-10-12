@@ -100,9 +100,6 @@ export function SignIn() {
                   className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Password must be exactly 6 characters
-              </p>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 20 }}

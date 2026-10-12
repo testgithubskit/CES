@@ -113,7 +113,7 @@ export function WorkCenters() {
         </Button>
       </div>
 
-      <Card className="flex min-h-0 flex-1 flex-col rounded-none">
+      <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           <div className="min-h-0 flex-1 overflow-auto">
           <Table>

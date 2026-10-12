@@ -15,7 +15,7 @@ export default defineConfig({
     exclude: ['occt-import-js'],
   },
   server: {
-    port: 3000,
+    port: 5171,
     host: true, // Makes it accessible from your IP address
   },
 })

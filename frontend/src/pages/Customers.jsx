@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent } from '../components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
 import { Label } from '../components/ui/label'
@@ -182,11 +182,8 @@ export function Customers() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Customers List</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Card className="rounded-none border-0 shadow-none">
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>

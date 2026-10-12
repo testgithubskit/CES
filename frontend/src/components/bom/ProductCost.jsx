@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Download } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
@@ -35,6 +35,7 @@ export function ProductCost({ productId }) {
   const [customerId, setCustomerId] = useState('')
   const scrollerRef = useRef(null)
   const tools = useTableTools(summary?.operations || [], ['machine_name', 'part_name', 'part_number', 'operation_name', 'operation_number'])
+  const costTools = useTableTools(summary?.additional_costs || [], ['cost_name', 'cost_value'])
 
   const load = async () => {
     const data = await productsService.getCost(productId)
@@ -161,11 +162,18 @@ export function ProductCost({ productId }) {
                   ['part_total_time', 'Total Hrs/Part'],
                   ['cost_per_qty', 'Cost/Qty'],
                   ['cost_for_overall_qty', 'Overall Qty Cost'],
-                ].map(([column, heading]) => (
+                ].map(([column, heading]) => {
+                  const active = tools.sort.key === column
+                  const Icon = !active ? ArrowUpDown : tools.sort.direction === 'desc' ? ArrowDown : ArrowUp
+                  return (
                   <th key={column} className="h-8 border-b border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">
-                    <button type="button" onClick={() => tools.toggleSort(column)}>{heading}</button>
+                    <button type="button" className="inline-flex items-center gap-1" onClick={() => tools.toggleSort(column)}>
+                      {heading}
+                      <Icon className={`h-3 w-3 ${active ? 'text-foreground' : 'text-muted-foreground'}`} />
+                    </button>
                   </th>
-                ))}
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
@@ -206,15 +214,28 @@ export function ProductCost({ productId }) {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
-                  <th className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Cost Name</th>
-                  <th className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Cost Value</th>
+                  {[
+                    ['cost_name', 'Cost Name'],
+                    ['cost_value', 'Cost Value'],
+                  ].map(([column, heading]) => {
+                    const active = costTools.sort.key === column
+                    const Icon = !active ? ArrowUpDown : costTools.sort.direction === 'desc' ? ArrowDown : ArrowUp
+                    return (
+                      <th key={column} className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">
+                        <button type="button" className="inline-flex items-center gap-1" onClick={() => costTools.toggleSort(column)}>
+                          {heading}
+                          <Icon className={`h-3 w-3 ${active ? 'text-foreground' : 'text-muted-foreground'}`} />
+                        </button>
+                      </th>
+                    )
+                  })}
                   <th className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {summary.additional_costs.length === 0 ? (
+                {costTools.rows.length === 0 ? (
                   <tr><td colSpan={3} className="border border-border px-2 py-2 text-muted-foreground">No additional costs added yet</td></tr>
-                ) : summary.additional_costs.map((cost) => (
+                ) : costTools.rows.map((cost) => (
                   <tr key={cost.id}>
                     <td className="border border-border px-2 py-1">{cost.cost_name}</td>
                     <td className="border border-border px-2 py-1">{money(cost.cost_value)}</td>

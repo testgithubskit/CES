@@ -34,7 +34,7 @@ function formatDate(value) {
 
 export function Products() {
   const [products, setProducts] = useState([])
-  const tools = useTableTools(products, ['product_number', 'product_name', 'description'])
+  const tools = useTableTools(products, ['product_number', 'product_name', 'description', 'created_by_name'])
   const [loading, setLoading] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -112,19 +112,18 @@ export function Products() {
 
   return (
     <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Products</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-heading text-2xl font-bold">Products</h1>
+        <div className="flex items-center gap-2">
+          <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search products" />
+          <Button onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Product
+          </Button>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Product
-        </Button>
       </div>
 
-      <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search products" />
-
-      <Card className="flex min-h-0 flex-1 flex-col rounded-none">
+      <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           <div className="min-h-0 flex-1 overflow-auto">
           <Table>
@@ -135,7 +134,7 @@ export function Products() {
                 <SortHead label="Product" column="product_name" sort={tools.sort} onSort={tools.toggleSort} />
                 <SortHead label="Qty" column="quantity" sort={tools.sort} onSort={tools.toggleSort} />
                 <SortHead label="Description" column="description" sort={tools.sort} onSort={tools.toggleSort} />
-                <TableHead>Created By</TableHead>
+                <SortHead label="Created By" column="created_by_name" sort={tools.sort} onSort={tools.toggleSort} />
                 <SortHead label="Created At" column="created_at" sort={tools.sort} onSort={tools.toggleSort} />
                 <TableHead>Action</TableHead>
               </TableRow>

@@ -1,13 +1,8 @@
 import apiClient from './client'
 
 export const bomService = {
-  getAssemblies: async (productId) => {
-    const response = await apiClient.get(`/api/v1/products/${productId}/assemblies`)
-    return response.data
-  },
-
-  createAssembly: async (productId, assemblyData) => {
-    const response = await apiClient.post(`/api/v1/products/${productId}/assemblies`, assemblyData)
+  createAssembly: async (assemblyData) => {
+    const response = await apiClient.post('/api/v1/assemblies', assemblyData)
     return response.data
   },
 
@@ -21,33 +16,8 @@ export const bomService = {
     return response.data
   },
 
-  getSubAssemblies: async (assemblyId) => {
-    const response = await apiClient.get(`/api/v1/assemblies/${assemblyId}/subassemblies`)
-    return response.data
-  },
-
-  createSubAssembly: async (assemblyId, subAssemblyData) => {
-    const response = await apiClient.post(`/api/v1/assemblies/${assemblyId}/subassemblies`, subAssemblyData)
-    return response.data
-  },
-
-  updateSubAssembly: async (subAssemblyId, subAssemblyData) => {
-    const response = await apiClient.put(`/api/v1/subassemblies/${subAssemblyId}`, subAssemblyData)
-    return response.data
-  },
-
-  deleteSubAssembly: async (subAssemblyId) => {
-    const response = await apiClient.delete(`/api/v1/subassemblies/${subAssemblyId}`)
-    return response.data
-  },
-
-  getParts: async (subAssemblyId) => {
-    const response = await apiClient.get(`/api/v1/subassemblies/${subAssemblyId}/parts`)
-    return response.data
-  },
-
-  createPart: async (subAssemblyId, partData) => {
-    const response = await apiClient.post(`/api/v1/subassemblies/${subAssemblyId}/parts`, partData)
+  createPart: async (partData) => {
+    const response = await apiClient.post('/api/v1/parts', partData)
     return response.data
   },
 
@@ -58,6 +28,43 @@ export const bomService = {
 
   deletePart: async (partId) => {
     const response = await apiClient.delete(`/api/v1/parts/${partId}`)
+    return response.data
+  },
+}
+
+export const operationsService = {
+  getByPart: async (partId) => {
+    const response = await apiClient.get('/api/v1/operations', { params: { part_id: partId } })
+    return response.data
+  },
+
+  create: async (operationData) => {
+    const response = await apiClient.post('/api/v1/operations', operationData)
+    return response.data
+  },
+
+  update: async (operationId, operationData) => {
+    const response = await apiClient.put(`/api/v1/operations/${operationId}`, operationData)
+    return response.data
+  },
+
+  delete: async (operationId) => {
+    const response = await apiClient.delete(`/api/v1/operations/${operationId}`)
+    return response.data
+  },
+}
+
+export const lookupService = {
+  partTypes: async () => {
+    const response = await apiClient.get('/api/v1/part-types')
+    return response.data
+  },
+  workCenters: async () => {
+    const response = await apiClient.get('/api/v1/work-centers')
+    return response.data
+  },
+  machines: async () => {
+    const response = await apiClient.get('/api/v1/machines')
     return response.data
   },
 }

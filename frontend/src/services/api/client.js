@@ -9,8 +9,26 @@ const apiClient = axios.create({
   },
 })
 
+const collectionPaths = new Set([
+  '/api/v1/products',
+  '/api/v1/customers',
+  '/api/v1/work-centers',
+  '/api/v1/machines',
+  '/api/v1/part-types',
+  '/api/v1/assemblies',
+  '/api/v1/parts',
+  '/api/v1/operations',
+  '/api/v1/documents',
+  '/api/v1/users',
+  '/api/v1/mhr-particulars',
+])
+
 apiClient.interceptors.request.use(
   (config) => {
+    const [path, query] = String(config.url || '').split('?')
+    if (collectionPaths.has(path)) {
+      config.url = query ? `${path}/?${query}` : `${path}/`
+    }
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, Integer, Numeric, ForeignKey, Index
+from sqlalchemy import String, Text, Integer, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 
@@ -10,13 +10,13 @@ class Operation(Base, TimestampMixin):
     part_id: Mapped[int] = mapped_column(Integer, ForeignKey("part.id"), nullable=False)
     operation_number: Mapped[str] = mapped_column(String(50), nullable=False)
     operation_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(50), nullable=False, default="in_house")
     work_center_id: Mapped[int] = mapped_column(Integer, ForeignKey("work_center.id"), nullable=False)
     machine_id: Mapped[int] = mapped_column(Integer, ForeignKey("machine.id"), nullable=False)
-    setup_time: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    cycle_time: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    setup_time: Mapped[str] = mapped_column(String(20), nullable=False)
+    cycle_time: Mapped[str] = mapped_column(String(20), nullable=False)
     work_instructions: Mapped[str] = mapped_column(Text, nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
-    sequence_no: Mapped[int] = mapped_column(Integer, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)
     
     # Relationships

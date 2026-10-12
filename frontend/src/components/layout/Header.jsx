@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Factory, LogOut, Package, Search, Users } from 'lucide-react'
 import { useAuth } from '../../hooks/use-auth'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 import { Button } from '../ui/button'
+import { Dialog, DialogContent } from '../ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,53 +14,104 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
-import { LogOut } from 'lucide-react'
+import { CommandSearch } from '../spectrumui/command-search'
+import { productsService } from '../../services/api/products'
+
+const pages = [
+  { label: 'Products', href: '/products', icon: <Package /> },
+  { label: 'Work Centers', href: '/configuration/work-centers', icon: <Factory /> },
+  { label: 'Customers', href: '/configuration/customers', icon: <Users /> },
+]
 
 export function Header() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [products, setProducts] = useState([])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    productsService.getAll().then((data) => {
+      setProducts(Array.isArray(data) ? data : data.items || [])
+    }).catch(() => setProducts([]))
+  }, [open])
 
   const getInitials = (name) => {
     if (!name) return 'U'
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+    return name.split(' ').map((part) => part[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  const groups = [
+    { label: 'Pages', items: pages },
+    {
+      label: 'Products',
+      items: products.map((product) => ({
+        label: `${product.product_number} ${product.product_name}`,
+        href: `/products/${product.id}`,
+        icon: <Package />,
+      })),
+    },
+  ]
+
   return (
-    <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6 dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex-1" />
-      <div className="flex items-center gap-4">
+    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
+      <Button variant="outline" className="h-8 w-72 justify-start text-muted-foreground" onClick={() => setOpen(true)}>
+        <Search className="h-4 w-4" />
+        Search
+        <span className="ml-auto text-[10px] uppercase tracking-wide">Ctrl K</span>
+      </Button>
+      <div className="flex items-center gap-2">
         <ThemeSwitcher />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-brand-500 text-white">
+            <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-foreground text-xs text-background">
                   {getInitials(user?.name || user?.email)}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" forceMount>
+          <DropdownMenuContent className="w-52" align="end">
             <DropdownMenuLabel className="font-normal">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
-                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-200">
-                  {user?.role || 'User'}
-                </span>
-              </div>
+              <p className="text-sm font-medium">{user?.name || 'User'}</p>
+              <p className="text-xs text-muted-foreground">{user?.role || 'user'}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="hover:bg-gray-100 dark:hover:bg-gray-700">
+            <DropdownMenuItem onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />
-              <span>Log out</span>
+              Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl border-0 bg-transparent p-0 shadow-none">
+          <CommandSearch
+            autoType={false}
+            query=""
+            placeholder="Search pages and products"
+            height={420}
+            groups={groups}
+            onSelect={(item) => {
+              if (item.href) navigate(item.href)
+              setOpen(false)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

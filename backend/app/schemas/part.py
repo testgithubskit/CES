@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
-from decimal import Decimal
+from app.schemas.product import as_whole_number
 
 
 class PartBase(BaseModel):
@@ -12,7 +12,12 @@ class PartBase(BaseModel):
     part_name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     size: Optional[str] = Field(None, max_length=100)
-    quantity: Decimal = Field(..., gt=0)
+    quantity: int = Field(..., gt=0)
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def quantity_is_integer(cls, value):
+        return as_whole_number(value)
 
 
 class PartCreate(PartBase):
@@ -27,7 +32,12 @@ class PartUpdate(BaseModel):
     part_name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     size: Optional[str] = Field(None, max_length=100)
-    quantity: Optional[Decimal] = Field(None, gt=0)
+    quantity: Optional[int] = Field(None, gt=0)
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def quantity_is_integer(cls, value):
+        return as_whole_number(value)
 
 
 class PartResponse(PartBase):

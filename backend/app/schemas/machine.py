@@ -12,6 +12,8 @@ class MachineBase(BaseModel):
     make: Optional[str] = Field(None, max_length=100)
     model: Optional[str] = Field(None, max_length=100)
     year_of_installation: Optional[int] = Field(None, ge=1900, le=2100)
+    cnc_controller: Optional[str] = Field(None, max_length=255)
+    cnc_controller_service: Optional[str] = Field(None, max_length=255)
     remarks: Optional[str] = None
     is_active: bool = True
 
@@ -28,12 +30,15 @@ class MachineUpdate(BaseModel):
     make: Optional[str] = Field(None, max_length=100)
     model: Optional[str] = Field(None, max_length=100)
     year_of_installation: Optional[int] = Field(None, ge=1900, le=2100)
+    cnc_controller: Optional[str] = Field(None, max_length=255)
+    cnc_controller_service: Optional[str] = Field(None, max_length=255)
     remarks: Optional[str] = None
     is_active: Optional[bool] = None
 
 
 class MachineResponse(MachineBase):
     id: int
+    year_of_installation: Optional[int] = None
     mhr: Optional[Decimal] = None
     recommended_mhr: Optional[Decimal] = None
     mhr_calculated_at: Optional[datetime] = None

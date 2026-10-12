@@ -7,6 +7,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        heading: ['Manrope', 'Inter', 'ui-sans-serif', 'sans-serif'],
+      },
       colors: {
         brand: {
           50: '#e6f0fa',

@@ -1,53 +1,52 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import io
+import re
 
 from app.database.session import get_db
 from app.models.document import Document
 from app.schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
 from app.core.dependencies import get_current_user
-from app.core.rbac import require_admin
 from app.storage.minio_service import minio_service
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/documents", tags=["Documents"])
 
-# Allowed file types
-ALLOWED_FILE_TYPES = {
-    'application/pdf': 'pdf',
-    'model/stl': 'stl',
-    'model/stl-ascii': 'stl',
-    'model/stl-binary': 'stl',
-    'application/sla': 'stl',
-    'application/step': 'step',
-    'application/octet-stream': 'step',  # STEP files often use this MIME type
+EXTENSION_TYPES = {
+    "pdf": "2d",
+    "stl": "3d",
+    "step": "3d",
+    "stp": "3d",
+}
+
+CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "stl": "model/stl",
+    "step": "application/step",
+    "stp": "application/step",
 }
 
 
-def _validate_file_type(file: UploadFile) -> str:
-    """
-    Validate file type and return the extension.
-    """
-    content_type = file.content_type or 'application/octet-stream'
-    
-    if content_type not in ALLOWED_FILE_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {content_type} not allowed. Allowed types: {list(ALLOWED_FILE_TYPES.keys())}"
-        )
-    
-    return ALLOWED_FILE_TYPES[content_type]
+def _safe_segment(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
+    return cleaned or "file"
+
+
+def _extension(filename: str) -> str:
+    if "." not in filename:
+        return ""
+    return filename.rsplit(".", 1)[-1].lower()
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
-    part_id: int = None,
-    assembly_id: int = None,
-    document_type: str = None,
-    version: str = None,
     file: UploadFile = File(...),
+    part_id: Optional[int] = Form(None),
+    assembly_id: Optional[int] = Form(None),
+    document_type: Optional[str] = Form(None),
+    version: str = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -82,21 +81,35 @@ def upload_document(
                 detail=f"Assembly with id {assembly_id} not found"
             )
     
-    # Validate file type
-    file_extension = _validate_file_type(file)
-    
-    # Read file content
+    file_extension = _extension(file.filename or "")
+    if file_extension not in EXTENSION_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Allowed files are PDF, STL, STEP, and STP"
+        )
+
+    if document_type not in (None, "", "2d", "3d"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document type must be 2d or 3d"
+        )
+    resolved_type = document_type or EXTENSION_TYPES[file_extension]
+
     file_content = file.file.read()
-    
-    # Generate unique object name
-    object_name = minio_service.generate_object_name(file.filename)
+    if part_id:
+        owner_folder = f"parts/{_safe_segment(part.part_number)}"
+    else:
+        owner_folder = f"assemblies/{_safe_segment(assembly.assembly_number)}"
+    object_name = (
+        f"{owner_folder}/v{_safe_segment(version)}/{_safe_segment(file.filename)}"
+    )
     
     # Upload to MinIO
     try:
         file_path = minio_service.upload_file(
             file_data=io.BytesIO(file_content),
             original_filename=file.filename,
-            content_type=file.content_type,
+            content_type=file.content_type or CONTENT_TYPES[file_extension],
             object_name=object_name
         )
     except Exception as e:
@@ -112,7 +125,7 @@ def upload_document(
             assembly_id=assembly_id,
             file_name=file.filename,
             file_type=file_extension,
-            document_type=document_type,
+            document_type=resolved_type,
             version=version,
             file_path=file_path,
             uploaded_by=current_user.id
@@ -208,12 +221,44 @@ def get_document_url(
     return {"url": url, "file_name": document.file_name}
 
 
+@router.get("/{document_id}/file")
+def download_document_file(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Stream the stored file so the browser can preview it.
+    """
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    try:
+        content = minio_service.download_file(document.file_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download file: {str(e)}"
+        )
+
+    media_type = CONTENT_TYPES.get(document.file_type, "application/octet-stream")
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{document.file_name}"'},
+    )
+
+
 @router.put("/{document_id}", response_model=DocumentResponse)
 def update_document(
     document_id: int,
     document_update: DocumentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update document metadata (document_type, version). Admin only.
@@ -238,7 +283,7 @@ def update_document(
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete a document from database and MinIO. Admin only.

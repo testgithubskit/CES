@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -39,14 +39,17 @@ def create_machine(
 
 @router.get("/", response_model=List[MachineResponse])
 def get_machines(
+    work_center_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all machines. Both admin and user can access.
+    Get machines, optionally for one work center.
     """
-    machines = db.query(Machine).order_by(Machine.id.asc()).all()
-    return machines
+    query = db.query(Machine)
+    if work_center_id is not None:
+        query = query.filter(Machine.work_center_id == work_center_id)
+    return query.order_by(Machine.id.asc()).all()
 
 
 @router.get("/{machine_id}", response_model=MachineResponse)

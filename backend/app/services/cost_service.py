@@ -28,9 +28,9 @@ class CostCalculationService:
         Calculate individual operation cost.
         Formula: (setup_time + cycle_time * quantity) * MHR
         """
-        # Convert time to hours (assuming setup_time and cycle_time are in hours)
-        setup_hours = Decimal(str(operation.setup_time))
-        cycle_hours = Decimal(str(operation.cycle_time))
+        from app.core.time_utils import time_to_hours
+        setup_hours = time_to_hours(operation.setup_time)
+        cycle_hours = time_to_hours(operation.cycle_time)
         
         # Total hours = setup + (cycle * quantity)
         total_hours = setup_hours + (cycle_hours * quantity)
@@ -66,11 +66,13 @@ class CostCalculationService:
         
         for operation in operations:
             machine = machines_map.get(operation.machine_id)
-            if not machine or not machine.mhr:
-                # Skip operations without valid MHR
+            rate = None
+            if machine is not None:
+                rate = machine.recommended_mhr if machine.recommended_mhr is not None else machine.mhr
+            if rate is None:
                 continue
-            
-            machine_mhr = Decimal(str(machine.mhr))
+
+            machine_mhr = Decimal(str(rate))
             op_cost = CostCalculationService.calculate_operation_cost(
                 operation, machine_mhr, quantity
             )

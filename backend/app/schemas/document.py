@@ -21,6 +21,7 @@ class DocumentCreate(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
+    file_name: Optional[str] = Field(None, min_length=1, max_length=255)
     document_type: Optional[str] = Field(None, max_length=50)
     version: Optional[str] = Field(None, max_length=50)
 

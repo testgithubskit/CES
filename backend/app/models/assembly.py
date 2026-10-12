@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, Integer, ForeignKey, Index
+from sqlalchemy import String, Integer, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 
@@ -11,7 +11,6 @@ class Assembly(Base, TimestampMixin):
     parent_assembly_id: Mapped[int] = mapped_column(Integer, ForeignKey("assembly.id"), nullable=True)
     assembly_number: Mapped[str] = mapped_column(String(50), nullable=False)
     assembly_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)
     
     # Relationships

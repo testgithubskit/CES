@@ -6,7 +6,6 @@ from app.database.session import get_db
 from app.models.operation import Operation
 from app.schemas.operation import OperationCreate, OperationUpdate, OperationResponse
 from app.core.dependencies import get_current_user
-from app.core.rbac import require_admin
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/operations", tags=["Operations"])
@@ -16,10 +15,10 @@ router = APIRouter(prefix="/api/v1/operations", tags=["Operations"])
 def create_operation(
     operation_data: OperationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Create a new operation. Admin only.
+    Create a new operation. Operation number starts at 10 and increases by 10.
     """
     # Check if part exists
     from app.models.part import Part
@@ -57,15 +56,21 @@ def create_operation(
             detail="Machine must belong to the specified work center"
         )
     
-    # Validate times are non-negative
-    if operation_data.setup_time < 0 or operation_data.cycle_time < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Setup time and cycle time cannot be negative"
-        )
-    
+    existing_numbers = db.query(Operation.operation_number).filter(
+        Operation.part_id == operation_data.part_id
+    ).all()
+    parsed_numbers = []
+    for (number,) in existing_numbers:
+        try:
+            parsed_numbers.append(int(number))
+        except (TypeError, ValueError):
+            continue
+    next_number = max(parsed_numbers) + 10 if parsed_numbers else 10
+
+    payload = operation_data.model_dump()
+    payload["operation_number"] = str(next_number)
     db_operation = Operation(
-        **operation_data.model_dump(),
+        **payload,
         created_by=current_user.id
     )
     db.add(db_operation)
@@ -76,13 +81,17 @@ def create_operation(
 
 @router.get("/", response_model=List[OperationResponse])
 def get_operations(
+    part_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all operations. Both admin and user can access.
+    Get operations. Optionally filter by part_id.
     """
-    operations = db.query(Operation).order_by(Operation.id.asc()).all()
+    query = db.query(Operation)
+    if part_id:
+        query = query.filter(Operation.part_id == part_id)
+    operations = query.order_by(Operation.id.asc()).all()
     return operations
 
 
@@ -124,10 +133,10 @@ def update_operation(
     operation_id: int,
     operation_update: OperationUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Update an operation. Admin only.
+    Update an operation. Operation number stays assigned.
     """
     operation = db.query(Operation).filter(Operation.id == operation_id).first()
     if not operation:
@@ -137,6 +146,7 @@ def update_operation(
         )
     
     update_data = operation_update.model_dump(exclude_unset=True)
+    update_data.pop("operation_number", None)
     
     # Validate work_center_id and machine_id relationship if both are being updated
     if 'work_center_id' in update_data and 'machine_id' in update_data:
@@ -147,18 +157,6 @@ def update_operation(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Machine must belong to the specified work center"
             )
-    
-    # Validate times are non-negative
-    if 'setup_time' in update_data and update_data['setup_time'] < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Setup time cannot be negative"
-        )
-    if 'cycle_time' in update_data and update_data['cycle_time'] < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cycle time cannot be negative"
-        )
     
     for field, value in update_data.items():
         setattr(operation, field, value)
@@ -172,7 +170,7 @@ def update_operation(
 def delete_operation(
     operation_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete an operation. Admin only.

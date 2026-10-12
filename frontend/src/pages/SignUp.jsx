@@ -66,7 +66,7 @@ export function SignUp() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <Card className="border-brand-200 dark:border-brand-800 shadow-2xl backdrop-blur-sm bg-white/80 dark:bg-gray-900/80">
+      <Card className="border-border bg-card shadow-sm">
         <CardHeader className="space-y-1 text-center pb-8">
           
           <CardTitle className="text-3xl font-bold bg-gradient-to-r from-brand-500 to-brand-600 bg-clip-text text-transparent">
@@ -75,7 +75,7 @@ export function SignUp() {
           <CardDescription className="pt-2 text-base">Create your account</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -83,8 +83,8 @@ export function SignUp() {
               className="space-y-2"
             >
               <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <User className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   id="name"
                   name="name"
@@ -92,9 +92,10 @@ export function SignUp() {
                   placeholder="John Doe"
                   required
                   maxLength={50}
+                  autoComplete="off"
                   value={formData.name}
                   onChange={handleChange}
-                  className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
+                  className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
               </div>
             </motion.div>
@@ -105,8 +106,8 @@ export function SignUp() {
               className="space-y-2"
             >
               <Label htmlFor="email" className="text-sm font-medium">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   id="email"
                   name="email"
@@ -114,9 +115,10 @@ export function SignUp() {
                   placeholder="name@example.com"
                   required
                   maxLength={50}
+                  autoComplete="off"
                   value={formData.email}
                   onChange={handleChange}
-                  className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
+                  className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
               </div>
             </motion.div>
@@ -127,8 +129,8 @@ export function SignUp() {
               className="space-y-2"
             >
               <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   id="password"
                   name="password"
@@ -136,18 +138,17 @@ export function SignUp() {
                   required
                   minLength={6}
                   maxLength={6}
+                  autoComplete="new-password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
+                  className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 {formData.password && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    {passwordValid ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
+                  passwordValid ? (
+                    <CheckCircle className="h-4 w-4 shrink-0 text-foreground" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -161,8 +162,8 @@ export function SignUp() {
               className="space-y-2"
             >
               <Label htmlFor="confirm_password" className="text-sm font-medium">Confirm Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   id="confirm_password"
                   name="confirm_password"
@@ -170,18 +171,17 @@ export function SignUp() {
                   required
                   minLength={6}
                   maxLength={6}
+                  autoComplete="new-password"
                   value={formData.confirm_password}
                   onChange={handleChange}
-                  className="pl-10 h-12 border-2 focus:border-brand-500 transition-all duration-200"
+                  className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 {formData.confirm_password && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    {passwordsMatch ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
+                  passwordsMatch ? (
+                    <CheckCircle className="h-4 w-4 shrink-0 text-foreground" />
+                  ) : (
+                    <XCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )
                 )}
               </div>
             </motion.div>
@@ -221,7 +221,7 @@ export function SignUp() {
             Already have an account?{' '}
             <Link
               to="/signin"
-              className="text-brand-500 hover:text-brand-600 font-semibold hover:underline transition-colors"
+              className="font-semibold underline-offset-2 hover:underline"
             >
               Sign in
             </Link>

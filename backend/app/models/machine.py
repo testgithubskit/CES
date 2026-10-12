@@ -14,6 +14,8 @@ class Machine(Base, TimestampMixin):
     make: Mapped[str] = mapped_column(String(100), nullable=True)
     model: Mapped[str] = mapped_column(String(100), nullable=True)
     year_of_installation: Mapped[int] = mapped_column(Integer, nullable=True)
+    cnc_controller: Mapped[str] = mapped_column(String(255), nullable=True)
+    cnc_controller_service: Mapped[str] = mapped_column(String(255), nullable=True)
     remarks: Mapped[str] = mapped_column(Text, nullable=True)
     mhr: Mapped[float] = mapped_column(Numeric(10, 2), nullable=True)
     recommended_mhr: Mapped[float] = mapped_column(Numeric(10, 2), nullable=True)

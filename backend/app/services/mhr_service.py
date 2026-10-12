@@ -88,7 +88,8 @@ def recalculate_machine_mhr(db: Session, machine_id: int, user_id: Optional[int]
         machine = db.query(Machine).filter(Machine.id == machine_id).first()
         if machine:
             machine.mhr = round(mhr_value, 2)
-            machine.recommended_mhr = round(mhr_value, 2)  # Auto-copy to recommended MHR
+            if machine.recommended_mhr is None:
+                machine.recommended_mhr = round(mhr_value, 2)
             machine.mhr_calculated_at = datetime.now(timezone.utc)
             if user_id is not None:
                 machine.mhr_updated_by = user_id

@@ -15,10 +15,13 @@ from app.api.routes.assemblies import router as assemblies_router
 from app.api.routes.parts import router as parts_router
 from app.api.routes.operations import router as operations_router
 from app.api.routes.documents import router as documents_router
+from app.api.routes.users import router as users_router
 from app.api.routes.mhr_particulars import router as mhr_particulars_router
+from app.api.routes.mhr_matrix import router as mhr_matrix_router
 from app.api.routes.machine_mhr import router as machine_mhr_router
 from app.api.routes.cost_estimation import router as cost_estimation_router
 from app.api.routes.cost_estimation_download import router as cost_estimation_download_router
+from app.api.routes.product_cost import router as product_cost_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -46,10 +49,13 @@ app.include_router(assemblies_router)
 app.include_router(parts_router)
 app.include_router(operations_router)
 app.include_router(documents_router)
+app.include_router(users_router)
 app.include_router(mhr_particulars_router)
+app.include_router(mhr_matrix_router)
 app.include_router(machine_mhr_router)
 app.include_router(cost_estimation_router)
 app.include_router(cost_estimation_download_router)
+app.include_router(product_cost_router)
 
 
 @app.get("/")

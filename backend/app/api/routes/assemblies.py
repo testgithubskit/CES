@@ -6,7 +6,6 @@ from app.database.session import get_db
 from app.models.assembly import Assembly
 from app.schemas.assembly import AssemblyCreate, AssemblyUpdate, AssemblyResponse
 from app.core.dependencies import get_current_user
-from app.core.rbac import require_admin
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/assemblies", tags=["Assemblies"])
@@ -45,7 +44,7 @@ def _check_circular_assembly(assembly_id: int, parent_assembly_id: int, db: Sess
 def create_assembly(
     assembly_data: AssemblyCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new assembly. Admin only.
@@ -152,7 +151,7 @@ def update_assembly(
     assembly_id: int,
     assembly_update: AssemblyUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update an assembly. Admin only.
@@ -212,7 +211,7 @@ def update_assembly(
 def delete_assembly(
     assembly_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete an assembly. Admin only.
@@ -224,27 +223,7 @@ def delete_assembly(
             detail="Assembly not found"
         )
     
-    # Check if assembly has child assemblies
-    child_assemblies = db.query(Assembly).filter(
-        Assembly.parent_assembly_id == assembly_id
-    ).first()
-    if child_assemblies:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete assembly with child assemblies. Delete children first."
-        )
-    
-    # Check if assembly has parts
-    from app.models.part import Part
-    existing_parts = db.query(Part).filter(
-        Part.assembly_id == assembly_id
-    ).first()
-    if existing_parts:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete assembly with parts. Delete parts first."
-        )
-    
-    db.delete(assembly)
+    from app.services.bom_delete import delete_assembly_tree
+    delete_assembly_tree(db, assembly)
     db.commit()
     return None

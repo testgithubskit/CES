@@ -15,7 +15,7 @@ export function ThemeSwitcher() {
         variant="ghost"
         size="icon"
         onClick={toggleTheme}
-        className="rounded-full w-10 h-10 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800 transition-all duration-200"
+        className="h-8 w-8 rounded-full border border-border"
       >
         <motion.div
           key={theme}
@@ -24,9 +24,9 @@ export function ThemeSwitcher() {
           transition={{ duration: 0.3 }}
         >
           {theme === 'light' ? (
-            <Moon className="h-5 w-5 text-brand-600" />
+            <Moon className="h-4 w-4" />
           ) : (
-            <Sun className="h-5 w-5 text-yellow-400" />
+            <Sun className="h-4 w-4" />
           )}
         </motion.div>
         <span className="sr-only">Toggle theme</span>

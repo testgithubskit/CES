@@ -8,7 +8,6 @@ class AssemblyBase(BaseModel):
     parent_assembly_id: Optional[int] = Field(None, gt=0)
     assembly_number: str = Field(..., min_length=1, max_length=50)
     assembly_name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = None
 
 
 class AssemblyCreate(AssemblyBase):
@@ -20,7 +19,6 @@ class AssemblyUpdate(BaseModel):
     parent_assembly_id: Optional[int] = Field(None, gt=0)
     assembly_number: Optional[str] = Field(None, min_length=1, max_length=50)
     assembly_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
 
 
 class AssemblyResponse(AssemblyBase):

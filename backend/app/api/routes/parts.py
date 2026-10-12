@@ -6,7 +6,6 @@ from app.database.session import get_db
 from app.models.part import Part
 from app.schemas.part import PartCreate, PartUpdate, PartResponse
 from app.core.dependencies import get_current_user
-from app.core.rbac import require_admin
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/parts", tags=["Parts"])
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/api/v1/parts", tags=["Parts"])
 def create_part(
     part_data: PartCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new part. Admin only.
@@ -133,7 +132,7 @@ def update_part(
     part_id: int,
     part_update: PartUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update a part. Admin only.
@@ -181,7 +180,7 @@ def update_part(
 def delete_part(
     part_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete a part. Admin only.
@@ -193,17 +192,7 @@ def delete_part(
             detail="Part not found"
         )
     
-    # Check if part has operations
-    from app.models.operation import Operation
-    existing_operations = db.query(Operation).filter(
-        Operation.part_id == part_id
-    ).first()
-    if existing_operations:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete part with operations. Delete operations first."
-        )
-    
-    db.delete(part)
+    from app.services.bom_delete import delete_part_tree
+    delete_part_tree(db, part)
     db.commit()
     return None

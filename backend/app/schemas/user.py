@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 
 class UserBase(BaseModel):
@@ -13,6 +13,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=6)
     role: str = Field(default="user", min_length=1, max_length=50)
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class UserUpdate(BaseModel):
@@ -21,10 +22,12 @@ class UserUpdate(BaseModel):
     role: Optional[str] = Field(None, min_length=1, max_length=50)
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=6, max_length=6)
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class UserResponse(UserBase):
     id: int
+    custom_fields: Dict[str, str] = {}
     created_at: datetime
     updated_at: datetime
 

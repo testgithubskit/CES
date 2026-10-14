@@ -205,7 +205,7 @@ export function ProductDetail() {
               <CardTitle>Bill of Materials</CardTitle>
               <CardDescription>Product structure with assemblies, subassemblies, and parts</CardDescription>
             </div>
-            <Button className="bg-brand-500 hover:bg-brand-600" onClick={() => openCreateDialog('assembly')}>
+            <Button className="bg-primary hover:bg-primary/90" onClick={() => openCreateDialog('assembly')}>
               <Plus className="mr-2 h-4 w-4" />
               Add Assembly
             </Button>
@@ -253,7 +253,7 @@ export function ProductDetail() {
               />
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-brand-500 hover:bg-brand-600">
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
                 {editingItem ? 'Update' : 'Create'}
               </Button>
             </DialogFooter>

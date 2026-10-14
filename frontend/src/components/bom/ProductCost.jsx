@@ -50,7 +50,7 @@ export function ProductCost({ productId }) {
   useEffect(() => {
     const node = scrollerRef.current
     if (!node) return undefined
-    const measure = () => setPageSize(Math.max(8, Math.floor(node.clientHeight / 32)))
+    const measure = () => setPageSize(Math.max(8, Math.floor((node.clientHeight - 44) / 32)))
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(node)
@@ -122,11 +122,12 @@ export function ProductCost({ productId }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="truncate font-heading text-lg font-bold">{summary.product_name}</h2>
-        <Button type="button" variant="outline" className="h-8 shrink-0" onClick={openExport}>
-          <Download className="mr-2 h-4 w-4" />
-          Export Summary
-        </Button>
+        <div className="min-w-0">
+          <h2 className="truncate font-heading text-lg font-bold">{summary.product_name}</h2>
+        </div>
+        <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center border border-border" aria-label="Export" title="Export" onClick={openExport}>
+          <Download className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="grid grid-cols-5 gap-2">
@@ -166,7 +167,7 @@ export function ProductCost({ productId }) {
                   const active = tools.sort.key === column
                   const Icon = !active ? ArrowUpDown : tools.sort.direction === 'desc' ? ArrowDown : ArrowUp
                   return (
-                  <th key={column} className="h-8 border-b border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">
+                  <th key={column} className="h-11 border-b border-border bg-muted px-2 text-left text-sm font-bold">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => tools.toggleSort(column)}>
                       {heading}
                       <Icon className={`h-3 w-3 ${active ? 'text-foreground' : 'text-muted-foreground'}`} />
@@ -221,7 +222,7 @@ export function ProductCost({ productId }) {
                     const active = costTools.sort.key === column
                     const Icon = !active ? ArrowUpDown : costTools.sort.direction === 'desc' ? ArrowDown : ArrowUp
                     return (
-                      <th key={column} className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">
+                      <th key={column} className="h-11 border border-border bg-muted px-2 text-left text-sm font-bold">
                         <button type="button" className="inline-flex items-center gap-1" onClick={() => costTools.toggleSort(column)}>
                           {heading}
                           <Icon className={`h-3 w-3 ${active ? 'text-foreground' : 'text-muted-foreground'}`} />
@@ -229,7 +230,7 @@ export function ProductCost({ productId }) {
                       </th>
                     )
                   })}
-                  <th className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Actions</th>
+                  <th className="h-11 border border-border bg-muted px-2 text-left text-sm font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>

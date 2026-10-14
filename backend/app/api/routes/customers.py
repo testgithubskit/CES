@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-
 from app.database.session import get_db
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerResponse
 from app.core.dependencies import get_current_user
 from app.core.rbac import require_admin
 from app.models.user import User
+from app.schemas.listing import RecordList
+from app.services.custom_fields import apply_values, catalog, pop_custom, with_fields
 
 router = APIRouter(prefix="/api/v1/customers", tags=["Customers"])
 
@@ -21,23 +21,27 @@ def create_customer(
     """
     Create a new customer. Admin only.
     """
-    db_customer = Customer(**customer_data.model_dump())
+    payload = customer_data.model_dump()
+    custom_fields = pop_custom(payload)
+    db_customer = Customer(**payload)
     db.add(db_customer)
+    db.flush()
+    apply_values(db, "customer", db_customer.id, custom_fields)
     db.commit()
     db.refresh(db_customer)
-    return db_customer
+    return with_fields(db, "customer", db_customer, CustomerResponse)
 
 
-@router.get("/", response_model=List[CustomerResponse])
+@router.get("/", response_model=RecordList[CustomerResponse])
 def get_customers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all customers. Both admin and user can access.
+    Get all customers, including custom column definitions. Both admin and user can access.
     """
     customers = db.query(Customer).order_by(Customer.id.asc()).all()
-    return customers
+    return catalog(db, "customer", customers, CustomerResponse)
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
@@ -55,7 +59,7 @@ def get_customer(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
         )
-    return customer
+    return with_fields(db, "customer", customer, CustomerResponse)
 
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
@@ -76,12 +80,13 @@ def update_customer(
         )
     
     update_data = customer_update.model_dump(exclude_unset=True)
+    custom_fields = pop_custom(update_data)
     for field, value in update_data.items():
         setattr(customer, field, value)
-    
+    apply_values(db, "customer", customer.id, custom_fields)
     db.commit()
     db.refresh(customer)
-    return customer
+    return with_fields(db, "customer", customer, CustomerResponse)
 
 
 @router.delete("/{customer_id}", status_code=status.HTTP_204_NO_CONTENT)

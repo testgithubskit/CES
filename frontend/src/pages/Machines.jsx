@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -8,9 +8,12 @@ import { Label } from '../components/ui/label'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { machinesService } from '../services/api/machines'
-import { TablePager, usePage } from '../components/common/TablePager'
+import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { workCentersService } from '../services/api/workCenters'
+import { useAuth } from '../hooks/use-auth'
+import { readList } from '../services/api/client'
+import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
 const emptyForm = {
   name: '',
@@ -37,10 +40,31 @@ function text(value) {
   return value
 }
 
+const machineColumns = [
+  { key: 'type', label: 'Type' },
+  { key: 'make', label: 'Make' },
+  { key: 'model', label: 'Model' },
+  { key: 'year_of_installation', label: 'Year' },
+  { key: 'cnc_controller', label: 'CNC Controller' },
+  { key: 'cnc_controller_service', label: 'Service' },
+  { key: 'remarks', label: 'Remarks' },
+  { key: 'mhr', label: 'MHR' },
+]
+
 export function Machines() {
   const { workCenterId } = useParams()
+  const { user } = useAuth()
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
+  const [fields, setFields] = useState([])
   const [workCenter, setWorkCenter] = useState(null)
   const [machines, setMachines] = useState([])
+  const [customValues, setCustomValues] = useState({})
+  const scrollerRef = useRef(null)
+  const columns = useMemo(() => [
+    ...machineColumns,
+    ...fields.map((field) => ({ key: field.field_key, label: field.label, custom: true })),
+  ], [fields])
+  const shown = useShownColumns('ces-columns-machine', columns)
   const [loading, setLoading] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -54,7 +78,9 @@ export function Machines() {
         machinesService.getAll({ work_center_id: workCenterId }),
       ])
       setWorkCenter(center)
-      setMachines(Array.isArray(machineList) ? machineList : machineList.items || [])
+      const listed = readList(machineList)
+      setMachines(listed.items)
+      setFields(listed.custom_columns)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to load machines'))
     } finally {
@@ -68,6 +94,7 @@ export function Machines() {
 
   const openCreate = () => {
     setFormData(emptyForm)
+    setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, ''])))
     setDialogOpen(true)
   }
 
@@ -85,6 +112,7 @@ export function Machines() {
       cnc_controller_service: formData.cnc_controller_service.trim(),
       remarks: formData.remarks.trim(),
       is_active: formData.is_active,
+      custom_fields: customValues,
     }
     setSaving(true)
     try {
@@ -102,13 +130,13 @@ export function Machines() {
 
   const setField = (key) => (event) => setFormData((current) => ({ ...current, [key]: event.target.value }))
 
-  const tools = useTableTools(machines, ['name', 'machine_code', 'type', 'make', 'model', 'cnc_controller', 'cnc_controller_service', 'remarks'])
-  const page = usePage(tools.rows)
+  const tools = useTableTools(machines.map((item) => ({ ...item, ...(item.custom_fields || {}), mhr: item.recommended_mhr ?? item.mhr })), columns.map((column) => column.key))
+  const page = useMeasuredPage(tools.rows, scrollerRef)
 
   return (
     <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
       <div>
-        <Link to="/configuration/work-centers" className="mb-3 inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/configuration?tab=work-centers" className="mb-3 inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="mr-1 h-4 w-4" />
           Work Centers
         </Link>
@@ -116,7 +144,8 @@ export function Machines() {
           <h1 className="font-heading text-2xl font-bold">{workCenter?.name || 'Machines'}</h1>
           <div className="flex items-center gap-2">
             <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search machines" />
-            <Button onClick={openCreate}>
+            <TableToolsMenu entityType="machine" isAdmin={isAdmin} fields={fields} onFields={load} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Machines" />
+            <Button className="h-8" onClick={openCreate}>
               <Plus className="mr-2 h-4 w-4" />
               Add Machine
             </Button>
@@ -125,42 +154,32 @@ export function Machines() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-16">Sl No</TableHead>
-                <SortHead label="Type" column="type" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Make" column="make" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Model" column="model" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Year" column="year_of_installation" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="CNC Controller" column="cnc_controller" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Service" column="cnc_controller_service" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Remarks" column="remarks" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="MHR" column="mhr" sort={tools.sort} onSort={tools.toggleSort} className="text-right" />
+                {shown.visible.map((column) => (
+                  <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center">Loading...</TableCell>
+                  <TableCell colSpan={shown.visible.length + 1} className="text-center">Loading...</TableCell>
                 </TableRow>
               ) : page.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">No machines found</TableCell>
+                  <TableCell colSpan={shown.visible.length + 1} className="text-center text-muted-foreground">No machines found</TableCell>
                 </TableRow>
               ) : (
                 page.rows.map((item, index) => (
                   <TableRow key={item.id}>
                     <TableCell>{(page.page - 1) * page.pageSize + index + 1}</TableCell>
-                    <TableCell>{text(item.type)}</TableCell>
-                    <TableCell>{text(item.make)}</TableCell>
-                    <TableCell>{text(item.model)}</TableCell>
-                    <TableCell>{text(item.year_of_installation)}</TableCell>
-                    <TableCell>{text(item.cnc_controller)}</TableCell>
-                    <TableCell>{text(item.cnc_controller_service)}</TableCell>
-                    <TableCell className="max-w-xs whitespace-pre-wrap">{text(item.remarks)}</TableCell>
-                    <TableCell className="text-right">{text(item.recommended_mhr ?? item.mhr)}</TableCell>
+                    {shown.visible.map((column) => (
+                      <TableCell key={column.key}>{text(column.custom ? item.custom_fields?.[column.key] : column.key === 'mhr' ? (item.recommended_mhr ?? item.mhr) : item[column.key])}</TableCell>
+                    ))}
                   </TableRow>
                 ))
               )}
@@ -222,6 +241,7 @@ export function Machines() {
               />
               Active
             </label>
+            <CustomFieldInputs fields={fields} values={customValues} onChange={setCustomValues} />
             <DialogFooter>
               <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Add Machine'}</Button>
             </DialogFooter>

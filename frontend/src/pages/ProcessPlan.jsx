@@ -23,7 +23,7 @@ export function ProcessPlan() {
               Select a part from the BOM to view and manage its process plan
             </p>
             <Link to="/bom">
-              <Button className="bg-brand-500 hover:bg-brand-600">
+              <Button className="bg-primary hover:bg-primary/90">
                 Go to BOM <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>

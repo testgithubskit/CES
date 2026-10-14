@@ -8,7 +8,7 @@ export function NotFound() {
     <div className="flex h-screen items-center justify-center bg-muted/20">
       <Card className="max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-6xl font-bold text-brand-500">404</CardTitle>
+          <CardTitle className="text-6xl font-bold text-primary">404</CardTitle>
           <CardTitle className="text-2xl">Page Not Found</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -17,7 +17,7 @@ export function NotFound() {
           </p>
           <div className="flex gap-2">
             <Link to="/dashboard" className="flex-1">
-              <Button className="w-full bg-brand-500 hover:bg-brand-600">
+              <Button className="w-full bg-primary hover:bg-primary/90">
                 <Home className="mr-2 h-4 w-4" />
                 Dashboard
               </Button>

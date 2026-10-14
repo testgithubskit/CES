@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from decimal import Decimal
 
 
@@ -19,7 +19,7 @@ class MachineBase(BaseModel):
 
 
 class MachineCreate(MachineBase):
-    pass
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class MachineUpdate(BaseModel):
@@ -34,10 +34,12 @@ class MachineUpdate(BaseModel):
     cnc_controller_service: Optional[str] = Field(None, max_length=255)
     remarks: Optional[str] = None
     is_active: Optional[bool] = None
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class MachineResponse(MachineBase):
     id: int
+    custom_fields: Dict[str, str] = {}
     year_of_installation: Optional[int] = None
     mhr: Optional[Decimal] = None
     recommended_mhr: Optional[Decimal] = None

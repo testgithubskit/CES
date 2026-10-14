@@ -104,18 +104,10 @@ export function downloadCostPdf(summary, customer) {
     doc.text(`Qty ${summary.quantity}`, width - 10, 14, { align: 'right' })
   }
   drawHeader()
-  doc.setTextColor(20, 20, 20)
-  doc.setFillColor(248, 248, 248)
-  doc.rect(10, 22, width / 2 - 14, 28, 'F')
-  doc.rect(width / 2 + 2, 22, width / 2 - 12, 28, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(8)
-  doc.text('PRODUCT', 13, 27)
-  doc.text('CUSTOMER', width / 2 + 5, 27)
-  doc.setFont('helvetica', 'normal')
   const productText = [
     summary.product_name || '',
     `${summary.product_number || ''}   Qty ${summary.quantity ?? ''}`,
+    ...(summary.custom_fields || []).filter((field) => field.value).slice(0, 4).map((field) => `${field.label}: ${field.value}`),
   ]
   const customerText = [
     customer.company_name || '',
@@ -123,10 +115,20 @@ export function downloadCostPdf(summary, customer) {
     [customer.email, customer.contact_number].filter(Boolean).join('  ·  '),
     customer.address || '',
   ].filter(Boolean)
+  doc.setTextColor(20, 20, 20)
+  doc.setFillColor(248, 248, 248)
+  const detailHeight = Math.max(28, 16 + Math.max(productText.length, customerText.length) * 4)
+  doc.rect(10, 22, width / 2 - 14, detailHeight, 'F')
+  doc.rect(width / 2 + 2, 22, width / 2 - 12, detailHeight, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.text('PRODUCT', 13, 27)
+  doc.text('CUSTOMER', width / 2 + 5, 27)
+  doc.setFont('helvetica', 'normal')
   productText.forEach((line, index) => doc.text(String(line), 13, 32 + index * 4))
   customerText.slice(0, 4).forEach((line, index) => doc.text(String(line), width / 2 + 5, 32 + index * 4))
   autoTable(doc, {
-    startY: 54,
+    startY: 26 + detailHeight,
     head: [['Setup', 'Cycle', 'Setup + Cycle', 'Machining', 'Additional', 'Grand Total']],
     body: [[
       summary.total_setup_time,
@@ -183,6 +185,9 @@ export async function downloadCostExcel(summary, customer) {
   sheet.addRow([summary.product_name])
   sheet.getRow(1).font = { bold: true, size: 16 }
   sheet.addRow([summary.product_number, `Qty ${summary.quantity}`])
+  ;(summary.custom_fields || []).forEach((field) => {
+    if (field.value) sheet.addRow([field.label, field.value])
+  })
   sheet.addRow([])
   sheet.addRow(['Customer', customer.company_name])
   customerLines(customer).forEach((line) => sheet.addRow(line))

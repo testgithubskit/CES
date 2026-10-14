@@ -141,10 +141,10 @@ function FittedModel({ geometries, theme }) {
         args={[floor.span * 4, floor.span * 4]}
         cellSize={floor.span / 10}
         cellThickness={0.6}
-        cellColor={theme === 'dark' ? '#525252' : '#d4d4d4'}
+        cellColor={theme === 'dark' ? '#004883' : '#18181b'}
         sectionSize={floor.span / 2}
         sectionThickness={1.1}
-        sectionColor="#a3a3a3"
+        sectionColor="#004883"
         fadeDistance={floor.span * 8}
         infiniteGrid
       />
@@ -160,7 +160,7 @@ function ModelCanvas({ geometries, theme }) {
       camera={{ position: [3, 2, 4], fov: 35, near: 0.01, far: 100 }}
       onCreated={({ size }) => console.log('[3D preview] canvas on screen', { width: size.width, height: size.height, meshes: geometries.length })}
     >
-      <color attach="background" args={[dark ? '#000000' : '#fafafa']} />
+      <color attach="background" args={[dark ? '#18181b' : '#ffffff']} />
       <ambientLight intensity={0.85} />
       <directionalLight position={[6, 8, 4]} intensity={1.4} />
       <FittedModel geometries={geometries} theme={theme} />
@@ -172,9 +172,9 @@ function ModelCanvas({ geometries, theme }) {
 function previewSurface(theme) {
   const shared = 'relative h-full min-h-[280px] w-full overflow-hidden bg-[size:24px_24px]'
   if (theme === 'dark') {
-    return `${shared} bg-black bg-[linear-gradient(to_right,#262626_1px,transparent_1px),linear-gradient(to_bottom,#262626_1px,transparent_1px)] text-neutral-300`
+    return `${shared} bg-[#18181b] bg-[linear-gradient(to_right,#004883_1px,transparent_1px),linear-gradient(to_bottom,#004883_1px,transparent_1px)] text-white`
   }
-  return `${shared} bg-neutral-50 bg-[linear-gradient(to_right,#e5e5e5_1px,transparent_1px),linear-gradient(to_bottom,#e5e5e5_1px,transparent_1px)] text-neutral-700`
+  return `${shared} bg-white bg-[linear-gradient(to_right,#00488333_1px,transparent_1px),linear-gradient(to_bottom,#00488333_1px,transparent_1px)] text-[#18181b]`
 }
 
 export function PartPreview({ fileType, fileName, data }) {
@@ -195,16 +195,6 @@ export function PartPreview({ fileType, fileName, data }) {
 
   const kind = (fileType || fileName?.split('.').pop() || '').toLowerCase()
   const bytes = useMemo(() => (data ? data.slice(0) : null), [data])
-  const pdfUrl = useMemo(() => {
-    if (!bytes || kind !== 'pdf') return ''
-    return URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-  }, [bytes, kind])
-
-  useEffect(() => {
-    return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
-    }
-  }, [pdfUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -224,8 +214,13 @@ export function PartPreview({ fileType, fileName, data }) {
       console.log('[3D preview] start', { fileName, kind, bytes: copy.byteLength })
       try {
         if (kind === 'pdf') {
-          if (!cancelled) setLoading(false)
-          return
+          const pdf = await pdfjs.getDocument({ data: copy }).promise
+          if (cancelled) {
+            pdf.destroy()
+            return
+          }
+          pdfRef.current = pdf
+          setPageCount(pdf.numPages)
         } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(kind)) {
           const blob = new Blob([copy])
           const url = URL.createObjectURL(blob)
@@ -291,20 +286,22 @@ export function PartPreview({ fileType, fileName, data }) {
     const render = () => {
       pdf.getPage(page).then((pdfPage) => {
         if (cancelled) return
-        const rotation = pdfPage.rotate || 0
-        const base = pdfPage.getViewport({ scale: 1, rotation })
+        const base = pdfPage.getViewport({ scale: 1 })
         const width = frame.clientWidth
         const height = frame.clientHeight
         if (width < 8 || height < 8) return
-        const scale = Math.min(width / base.width, height / base.height)
+        const fit = Math.min(width / base.width, height / base.height)
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-        const viewport = pdfPage.getViewport({ scale: scale * pixelRatio, rotation })
+        const viewport = pdfPage.getViewport({ scale: fit * zoom * pixelRatio })
         const context = canvas.getContext('2d')
         canvas.width = Math.floor(viewport.width)
         canvas.height = Math.floor(viewport.height)
-        canvas.style.width = `${Math.floor(base.width * scale)}px`
-        canvas.style.height = `${Math.floor(base.height * scale)}px`
-        task = pdfPage.render({ canvasContext: context, viewport })
+        canvas.style.width = `${Math.floor(base.width * fit * zoom)}px`
+        canvas.style.height = `${Math.floor(base.height * fit * zoom)}px`
+        context.setTransform(1, 0, 0, 1, 0, 0)
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        task?.cancel?.()
+        task = pdfPage.render({ canvasContext: context, canvas, viewport })
       })
     }
     render()
@@ -315,7 +312,7 @@ export function PartPreview({ fileType, fileName, data }) {
       task?.cancel?.()
       observer.disconnect()
     }
-  }, [page, pageCount, kind])
+  }, [page, pageCount, kind, zoom])
 
   useEffect(() => {
     const frame = frameRef.current
@@ -340,17 +337,51 @@ export function PartPreview({ fileType, fileName, data }) {
   }
   if (kind === 'pdf') {
     return (
-      <iframe
-        title={fileName || 'Drawing'}
-        src={pdfUrl ? `${pdfUrl}#toolbar=1&navpanes=0&zoom=page-fit` : undefined}
-        className="h-full w-full border-0 bg-background"
-      />
+      <div
+        ref={frameRef}
+        className="relative h-full w-full cursor-grab overflow-hidden bg-background active:cursor-grabbing"
+        onDoubleClick={() => {
+          setZoom((current) => (current > 1 ? 1 : 2.5))
+          setPan({ x: 0, y: 0 })
+        }}
+        onPointerDown={(event) => {
+          dragRef.current = { x: event.clientX, y: event.clientY, pan }
+        }}
+        onPointerMove={(event) => {
+          if (!dragRef.current) return
+          setPan({
+            x: dragRef.current.pan.x + event.clientX - dragRef.current.x,
+            y: dragRef.current.pan.y + event.clientY - dragRef.current.y,
+          })
+        }}
+        onPointerUp={() => { dragRef.current = null }}
+        onPointerLeave={() => { dragRef.current = null }}
+      >
+        <div
+          className="absolute left-1/2 top-1/2"
+          style={{ transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px))` }}
+        >
+          <canvas ref={canvasRef} className="block max-w-none" />
+        </div>
+      </div>
     )
   }
   if (imageUrl) {
     return (
-      <div className={`${surface} flex items-center justify-center p-4`}>
-        <img src={imageUrl} alt={fileName || 'Drawing'} className="max-h-full max-w-full object-contain" />
+      <div
+        className={`${surface} flex items-center justify-center overflow-hidden p-4`}
+        onDoubleClick={() => {
+          setZoom((current) => (current > 1 ? 1 : 2.5))
+          setPan({ x: 0, y: 0 })
+        }}
+      >
+        <img
+          src={imageUrl}
+          alt={fileName || 'Drawing'}
+          className="max-h-full max-w-full object-contain"
+          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+          draggable={false}
+        />
       </div>
     )
   }

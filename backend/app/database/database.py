@@ -8,6 +8,7 @@ from app.models import (
     Customer,
     PartType,
     Product,
+    CustomField,
     Assembly,
     Part,
     Document,

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 
 def as_whole_number(value):
@@ -26,12 +26,15 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
-    pass
+    product_number: str = Field(..., min_length=1, max_length=20)
+    product_name: str = Field(..., min_length=1, max_length=60)
+    description: Optional[str] = Field(None, max_length=160)
+    custom_fields: Dict[str, Optional[str]] = {}
 
 
 class ProductUpdate(BaseModel):
-    product_number: Optional[str] = Field(None, min_length=1, max_length=50)
-    product_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    product_number: Optional[str] = Field(None, min_length=1, max_length=20)
+    product_name: Optional[str] = Field(None, min_length=1, max_length=60)
     quantity: Optional[int] = Field(None, gt=0)
 
     @field_validator("quantity", mode="before")
@@ -39,13 +42,15 @@ class ProductUpdate(BaseModel):
     def quantity_is_integer(cls, value):
         return as_whole_number(value)
     version: Optional[str] = Field(None, max_length=50)
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=160)
+    custom_fields: Optional[Dict[str, Optional[str]]] = None
 
 
 class ProductResponse(ProductBase):
     id: int
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
+    custom_fields: Dict[str, str] = {}
     created_at: datetime
     updated_at: datetime
     

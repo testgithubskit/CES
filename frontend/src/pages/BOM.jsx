@@ -23,7 +23,7 @@ export function BOM() {
               Select a product from the Products page to view its BOM structure
             </p>
             <Link to="/products">
-              <Button className="bg-brand-500 hover:bg-brand-600">
+              <Button className="bg-primary hover:bg-primary/90">
                 Go to Products <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>

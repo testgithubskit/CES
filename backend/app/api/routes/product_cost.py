@@ -13,6 +13,7 @@ from app.models.machine import Machine
 from app.models.product_additional_cost import ProductAdditionalCost
 from app.core.dependencies import get_current_user
 from app.core.time_utils import time_to_hours, hours_to_clock
+from app.services.custom_fields import entries_for_entity
 
 router = APIRouter(prefix="/api/v1/products", tags=["Product Cost"])
 
@@ -57,11 +58,18 @@ class AdditionalCostRow(BaseModel):
     cost_value: float
 
 
+class CustomFieldEntry(BaseModel):
+    key: str
+    label: str
+    value: str = ""
+
+
 class ProductCostSummary(BaseModel):
     product_id: int
     product_name: str
     product_number: str
     quantity: int
+    custom_fields: List[CustomFieldEntry] = []
     total_setup_time: str
     total_cycle_time: str
     total_time: str
@@ -156,6 +164,7 @@ def build_summary(db: Session, product: Product) -> dict:
         "product_name": product.product_name,
         "product_number": product.product_number,
         "quantity": int(product.quantity or 1),
+        "custom_fields": entries_for_entity(db, "product", product.id),
         "total_setup_time": hours_to_clock(setup_total),
         "total_cycle_time": hours_to_clock(cycle_total),
         "total_time": hours_to_clock(setup_total + cycle_total),

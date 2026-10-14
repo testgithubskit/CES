@@ -113,7 +113,7 @@ export function CostBreakdown() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-brand-500">${result?.total_cost?.toFixed(2) || 0}</div>
+            <div className="text-2xl font-bold text-primary">${result?.total_cost?.toFixed(2) || 0}</div>
           </CardContent>
         </Card>
       </div>

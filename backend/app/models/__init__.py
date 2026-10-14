@@ -6,6 +6,7 @@ from app.models.machine_mhr_value import MachineMHRValue
 from app.models.customer import Customer
 from app.models.part_type import PartType
 from app.models.product import Product
+from app.models.custom_field import CustomField
 from app.models.assembly import Assembly
 from app.models.part import Part
 from app.models.document import Document
@@ -23,6 +24,7 @@ __all__ = [
     "Customer",
     "PartType",
     "Product",
+    "CustomField",
     "Assembly",
     "Part",
     "Document",

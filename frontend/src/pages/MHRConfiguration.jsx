@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { Download } from 'lucide-react'
 import { Input } from '../components/ui/input'
-import apiClient from '../services/api/client'
-
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
+import apiClient, { shareGet } from '../services/api/client'
+import { downloadExcel, downloadPdf } from '../components/common/tableExport'
 function money(value) {
   if (value === null || value === undefined || value === '') return ''
   const number = Number(value)
@@ -10,17 +12,17 @@ function money(value) {
   return number.toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
 
-export function MHRConfiguration() {
+export function MHRConfiguration({ embedded = false }) {
   const [matrix, setMatrix] = useState({ particulars: [], machines: [], values: [] })
   const [filter, setFilter] = useState('')
   const [drafts, setDrafts] = useState({})
   const [recommended, setRecommended] = useState({})
 
   const load = async () => {
-    const response = await apiClient.get('/api/v1/mhr/matrix')
-    setMatrix(response.data)
+    const data = await shareGet('/api/v1/mhr/matrix')
+    setMatrix(data)
     const next = {}
-    response.data.machines.forEach((machine) => {
+    data.machines.forEach((machine) => {
       next[machine.id] = machine.recommended_mhr ?? machine.mhr ?? ''
     })
     setRecommended(next)
@@ -84,25 +86,67 @@ export function MHRConfiguration() {
     }
   }
 
+  const exportColumns = [
+    { key: 'sl', label: 'Sl' },
+    { key: 'particular', label: 'Particulars' },
+    { key: 'code', label: 'Code' },
+    { key: 'calculation', label: 'Calculation' },
+    ...machines.map((machine) => ({ key: `machine-${machine.id}`, label: machine.label })),
+  ]
+  const exportRows = [
+    ...matrix.particulars.map((particular, index) => ({
+      sl: index + 1,
+      particular: particular.name,
+      code: particular.code,
+      calculation: particular.is_input ? 'Manual input' : particular.formula,
+      ...Object.fromEntries(machines.map((machine) => [`machine-${machine.id}`, cellValue(machine, particular)])),
+    })),
+    {
+      sl: '',
+      particular: 'Calculated MHR',
+      code: 'MHR',
+      calculation: '(CC + OC) / H',
+      ...Object.fromEntries(machines.map((machine) => [`machine-${machine.id}`, machine.mhr ?? ''])),
+    },
+    {
+      sl: '',
+      particular: 'Recommended MHR',
+      code: 'REC',
+      calculation: '',
+      ...Object.fromEntries(machines.map((machine) => [`machine-${machine.id}`, recommended[machine.id] ?? ''])),
+    },
+  ]
+
   return (
-    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-bold">Machine Hour Rates</h1>
-        <div className="flex items-center gap-2">
+    <div className={`flex flex-col gap-3 ${embedded ? 'h-full min-h-0' : 'h-[calc(100vh-2rem)]'}`}>
+      <div className="flex items-center gap-3">
+        {!embedded && <h1 className="font-heading text-2xl font-bold">Machine Hour Rates</h1>}
+        <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter machines" className="h-8 w-48" />
+        <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{machines.length} machines</span>
-          <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter machines" className="h-8 w-48" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex h-8 w-8 items-center justify-center border border-border" aria-label="Export" title="Export">
+                <Download className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => downloadPdf('Machine Hour Rates', exportColumns, exportRows)}>PDF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadExcel('Machine Hour Rates', exportColumns, exportRows)}>Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto border border-border">
-        <table className="w-max min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-background">
+        <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
+          <thead className="sticky top-0 z-30">
             <tr>
-              <th className="sticky left-0 z-20 h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Sl</th>
-              <th className="sticky left-10 z-20 h-8 min-w-56 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Particulars</th>
-              <th className="h-8 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Code</th>
-              <th className="h-8 min-w-40 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">Calculation</th>
+              <th className="sticky left-0 z-40 box-border h-8 w-10 min-w-10 max-w-10 border border-border bg-muted px-1.5 text-left text-xs font-bold">Sl</th>
+              <th className="sticky left-10 z-40 box-border h-8 w-44 min-w-44 max-w-44 border border-border bg-muted px-1.5 text-left text-xs font-bold">Particulars</th>
+              <th className="sticky left-[13.5rem] z-40 box-border h-8 w-16 min-w-16 max-w-16 border border-border bg-muted px-1.5 text-left text-xs font-bold">Code</th>
+              <th className="sticky left-[17.5rem] z-40 box-border h-8 w-32 min-w-32 max-w-32 border border-border bg-muted px-1.5 text-left text-xs font-bold">Calculation</th>
               {machines.map((machine) => (
-                <th key={machine.id} className="h-8 min-w-36 border border-border bg-neutral-100 px-2 text-left text-xs font-bold dark:bg-neutral-900">
+                <th key={machine.id} className="h-8 min-w-28 border border-border bg-muted px-1.5 text-left text-xs font-bold">
                   {machine.label}
                 </th>
               ))}
@@ -111,10 +155,10 @@ export function MHRConfiguration() {
           <tbody>
             {matrix.particulars.map((particular, index) => (
               <tr key={particular.id}>
-                <td className="sticky left-0 border border-border bg-background px-2 py-1">{index + 1}</td>
-                <td className="sticky left-10 border border-border bg-background px-2 py-1">{particular.name}</td>
-                <td className="border border-border px-2 py-1 font-semibold">{particular.code}</td>
-                <td className="border border-border px-2 py-1 text-muted-foreground">{particular.is_input ? 'Manual input' : particular.formula}</td>
+                <td className="sticky left-0 z-20 box-border h-7 w-10 min-w-10 max-w-10 border border-border bg-background px-1.5">{index + 1}</td>
+                <td className="sticky left-10 z-20 box-border h-7 w-44 min-w-44 max-w-44 border border-border bg-background px-1.5">{particular.name}</td>
+                <td className="sticky left-[13.5rem] z-20 box-border h-7 w-16 min-w-16 max-w-16 border border-border bg-background px-1.5 font-semibold">{particular.code}</td>
+                <td className="sticky left-[17.5rem] z-20 box-border h-7 w-32 min-w-32 max-w-32 border border-border bg-background px-1.5 text-muted-foreground">{particular.is_input ? 'Manual input' : particular.formula}</td>
                 {machines.map((machine) => {
                   const key = `${machine.id}:${particular.id}`
                   const value = cellValue(machine, particular)
@@ -122,7 +166,7 @@ export function MHRConfiguration() {
                     <td key={machine.id} className="border border-border px-1 py-1 text-right">
                       {particular.is_input ? (
                         <input
-                          className="h-7 w-full border border-input bg-background px-1 text-right"
+                          className="h-6 w-full border border-input bg-background px-1 text-right text-xs"
                           value={value}
                           onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
                           onBlur={(event) => saveInput(machine, particular, event.target.value)}
@@ -135,22 +179,24 @@ export function MHRConfiguration() {
                 })}
               </tr>
             ))}
-            <tr>
-              <td className="sticky left-0 border border-border bg-background px-2 py-2 font-bold" colSpan={2}>Calculated MHR</td>
-              <td className="border border-border px-2 py-2 font-bold">MHR</td>
-              <td className="border border-border px-2 py-2 text-muted-foreground">(CC + OC) / H</td>
+            <tr className="bg-accent">
+              <td className="sticky left-0 z-20 box-border h-7 w-10 min-w-10 max-w-10 border border-border bg-accent px-1.5 font-bold" />
+              <td className="sticky left-10 z-20 box-border h-7 w-44 min-w-44 max-w-44 border border-border bg-accent px-1.5 font-bold">Calculated MHR</td>
+              <td className="sticky left-[13.5rem] z-20 box-border h-7 w-16 min-w-16 max-w-16 border border-border bg-accent px-1.5 font-bold">MHR</td>
+              <td className="sticky left-[17.5rem] z-20 box-border h-7 w-32 min-w-32 max-w-32 border border-border bg-accent px-1.5 font-bold">(CC + OC) / H</td>
               {machines.map((machine) => (
-                <td key={machine.id} className="border border-border px-2 py-2 text-right font-bold">{money(machine.mhr)}</td>
+                <td key={machine.id} className="border border-border bg-accent px-2 text-right font-bold">{money(machine.mhr)}</td>
               ))}
             </tr>
-            <tr>
-              <td className="sticky left-0 border border-border bg-background px-2 py-2 font-bold" colSpan={2}>Recommended MHR</td>
-              <td className="border border-border px-2 py-2 font-bold">REC</td>
-              <td className="border border-border" />
+            <tr className="bg-accent">
+              <td className="sticky left-0 z-20 box-border h-7 w-10 min-w-10 max-w-10 border border-border bg-accent px-1.5 font-bold" />
+              <td className="sticky left-10 z-20 box-border h-7 w-44 min-w-44 max-w-44 border border-border bg-accent px-1.5 font-bold">Recommended MHR</td>
+              <td className="sticky left-[13.5rem] z-20 box-border h-7 w-16 min-w-16 max-w-16 border border-border bg-accent px-1.5 font-bold">REC</td>
+              <td className="sticky left-[17.5rem] z-20 box-border h-7 w-32 min-w-32 max-w-32 border border-border bg-accent" />
               {machines.map((machine) => (
-                <td key={machine.id} className="border border-border px-1 py-1">
+                <td key={machine.id} className="border border-border bg-accent px-1 py-1">
                   <input
-                    className="h-7 w-full border border-input bg-background px-1 text-right font-bold"
+                    className="h-6 w-full border border-input bg-background px-1 text-right text-xs font-bold"
                     value={recommended[machine.id] ?? ''}
                     onChange={(event) => setRecommended((current) => ({ ...current, [machine.id]: event.target.value }))}
                     onBlur={() => saveRecommended(machine)}

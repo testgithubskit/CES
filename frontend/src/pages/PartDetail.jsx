@@ -213,7 +213,7 @@ export function PartDetail() {
                   <CardTitle>Documents</CardTitle>
                   <CardDescription>2D and 3D files associated with this part</CardDescription>
                 </div>
-                <Button className="bg-brand-500 hover:bg-brand-600">
+                <Button className="bg-primary hover:bg-primary/90">
                   <Upload className="mr-2 h-4 w-4" />
                   Upload Document
                 </Button>
@@ -230,9 +230,9 @@ export function PartDetail() {
                     <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-3">
                         {doc.document_type === '3d' ? (
-                          <Box className="h-8 w-8 text-brand-500" />
+                          <Box className="h-8 w-8 text-primary" />
                         ) : (
-                          <FileText className="h-8 w-8 text-brand-500" />
+                          <FileText className="h-8 w-8 text-primary" />
                         )}
                         <div>
                           <p className="font-medium">{doc.file_name}</p>
@@ -269,7 +269,7 @@ export function PartDetail() {
                   <CardTitle>Process Plan</CardTitle>
                   <CardDescription>Manufacturing operations for this part</CardDescription>
                 </div>
-                <Button className="bg-brand-500 hover:bg-brand-600" onClick={openCreateDialog}>
+                <Button className="bg-primary hover:bg-primary/90" onClick={openCreateDialog}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Operation
                 </Button>
@@ -399,7 +399,7 @@ export function PartDetail() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-brand-500 hover:bg-brand-600">
+              <Button type="submit" className="bg-primary hover:bg-primary/90">
                 {editingOperation ? 'Update' : 'Create'}
               </Button>
             </DialogFooter>

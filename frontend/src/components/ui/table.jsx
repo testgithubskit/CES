@@ -2,7 +2,7 @@ import * as React from 'react'
 import { cn } from '../../lib/utils'
 
 const Table = React.forwardRef(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+  <div className="relative w-full overflow-auto rounded-lg border border-border">
     <table
       ref={ref}
       className={cn('w-full caption-bottom text-xs', className)}
@@ -38,7 +38,7 @@ TableFooter.displayName = 'TableFooter'
 const TableRow = React.forwardRef(({ className, ...props }, ref) => (
   <tr
     ref={ref}
-    className={cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', className)}
+    className={cn('border-b border-border/70 transition-colors hover:bg-accent/70 data-[state=selected]:bg-accent', className)}
     {...props}
   />
 ))
@@ -48,7 +48,7 @@ const TableHead = React.forwardRef(({ className, ...props }, ref) => (
   <th
     ref={ref}
     className={cn(
-      'h-8 bg-neutral-100 px-2 py-0 text-left align-middle text-xs font-bold text-foreground dark:bg-neutral-900 [&:has([role=checkbox])]:pr-0',
+      'h-11 bg-muted/70 px-2 py-0 text-left align-middle text-sm font-semibold tracking-tight text-foreground [&:has([role=checkbox])]:pr-0',
       className
     )}
     {...props}
@@ -68,7 +68,7 @@ TableCell.displayName = 'TableCell'
 const TableCaption = React.forwardRef(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn('mt-4 text-sm text-muted-foreground dark:text-gray-400', className)}
+    className={cn('mt-4 text-sm text-muted-foreground', className)}
     {...props}
   />
 ))

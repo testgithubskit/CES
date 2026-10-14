@@ -40,11 +40,6 @@ export function AuthProvider({ children }) {
     return response
   }
 
-  const register = async (userData) => {
-    const response = await authService.register(userData)
-    return response
-  }
-
   const logout = async () => {
     try {
       await authService.logout()
@@ -67,7 +62,6 @@ export function AuthProvider({ children }) {
         loading,
         isAuthenticated,
         login,
-        register,
         logout,
         checkAuth,
       }}

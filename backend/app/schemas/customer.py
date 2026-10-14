@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 
 class CustomerBase(BaseModel):
@@ -13,7 +13,7 @@ class CustomerBase(BaseModel):
 
 
 class CustomerCreate(CustomerBase):
-    pass
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class CustomerUpdate(BaseModel):
@@ -23,10 +23,12 @@ class CustomerUpdate(BaseModel):
     contact_person: Optional[str] = Field(None, max_length=255)
     email: Optional[EmailStr] = None
     contact_number: Optional[str] = Field(None, max_length=50)
+    custom_fields: Dict[str, Optional[str]] | None = None
 
 
 class CustomerResponse(CustomerBase):
     id: int
+    custom_fields: Dict[str, str] = {}
     created_at: datetime
     updated_at: datetime
     

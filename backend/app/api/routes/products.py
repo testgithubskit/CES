@@ -11,6 +11,8 @@ from app.models.operation import Operation
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.core.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.listing import RecordList
+from app.services.custom_fields import apply_values, catalog, entries_for_entity, pop_custom, with_fields, with_fields_many
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 
@@ -76,6 +78,12 @@ class AssemblyHierarchy(BaseModel):
 AssemblyHierarchy.model_rebuild()
 
 
+class CustomFieldEntry(BaseModel):
+    key: str
+    label: str
+    value: str = ""
+
+
 class ProductHierarchy(BaseModel):
     id: int
     product_number: str
@@ -83,8 +91,15 @@ class ProductHierarchy(BaseModel):
     quantity: int
     version: Optional[str] = None
     description: Optional[str] = None
+    created_by: Optional[int] = None
+    created_by_name: Optional[str] = None
+    custom_fields: List[CustomFieldEntry] = []
     direct_parts: List[PartHierarchy] = []
     assemblies: List[AssemblyHierarchy] = []
+
+
+def _product_response(db: Session, product: Product) -> ProductResponse:
+    return with_fields(db, "product", product, ProductResponse)
 
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
@@ -97,6 +112,7 @@ def create_product(
     Create a new product. Version defaults to 1.
     """
     payload = product_data.model_dump()
+    custom_fields = pop_custom(payload)
     if not payload.get("version"):
         payload["version"] = "1"
     db_product = Product(
@@ -104,21 +120,23 @@ def create_product(
         created_by=current_user.id
     )
     db.add(db_product)
+    db.flush()
+    apply_values(db, "product", db_product.id, custom_fields)
     db.commit()
     db.refresh(db_product)
-    return db_product
+    return _product_response(db, db_product)
 
 
-@router.get("/", response_model=List[ProductResponse])
+@router.get("/", response_model=RecordList[ProductResponse])
 def get_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all products. Both admin and user can access.
+    Get all products, including custom column definitions. Both admin and user can access.
     """
     products = db.query(Product).options(joinedload(Product.created_by_user)).order_by(Product.id.asc()).all()
-    return products
+    return catalog(db, "product", products, ProductResponse)
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -130,13 +148,13 @@ def get_product(
     """
     Get a specific product by ID.
     """
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).options(joinedload(Product.created_by_user)).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found"
         )
-    return product
+    return _product_response(db, product)
 
 
 @router.put("/{product_id}", response_model=ProductResponse)
@@ -149,7 +167,7 @@ def update_product(
     """
     Update a product. Admin only.
     """
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).options(joinedload(Product.created_by_user)).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -157,12 +175,13 @@ def update_product(
         )
     
     update_data = product_update.model_dump(exclude_unset=True)
+    custom_fields = pop_custom(update_data)
     for field, value in update_data.items():
         setattr(product, field, value)
-    
+    apply_values(db, "product", product.id, custom_fields)
     db.commit()
     db.refresh(product)
-    return product
+    return _product_response(db, product)
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -224,7 +243,7 @@ def get_product_hierarchy(
     Get complete product hierarchy with nested assemblies, parts, and operations.
     """
     # Get product
-    product = db.query(Product).filter(Product.id == product_id).first()
+    product = db.query(Product).options(joinedload(Product.created_by_user)).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -333,6 +352,9 @@ def get_product_hierarchy(
         quantity=int(product.quantity),
         version=product.version,
         description=product.description,
+        created_by=product.created_by,
+        created_by_name=product.created_by_name,
+        custom_fields=entries_for_entity(db, "product", product.id),
         direct_parts=direct_part_hierarchies,
         assemblies=root_assembly_hierarchies
     )

@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-
 from app.database.session import get_db
 from app.models.work_center import WorkCenter
 from app.schemas.work_center import WorkCenterCreate, WorkCenterUpdate, WorkCenterResponse
 from app.core.dependencies import get_current_user
 from app.core.rbac import require_admin
 from app.models.user import User
+from app.schemas.listing import RecordList
+from app.services.custom_fields import apply_values, catalog, pop_custom, with_fields
 
 router = APIRouter(prefix="/api/v1/work-centers", tags=["Work Centers"])
 
@@ -21,23 +21,27 @@ def create_work_center(
     """
     Create a new work center. Admin only.
     """
-    db_work_center = WorkCenter(**work_center_data.model_dump())
+    payload = work_center_data.model_dump()
+    custom_fields = pop_custom(payload)
+    db_work_center = WorkCenter(**payload)
     db.add(db_work_center)
+    db.flush()
+    apply_values(db, "work_center", db_work_center.id, custom_fields)
     db.commit()
     db.refresh(db_work_center)
-    return db_work_center
+    return with_fields(db, "work_center", db_work_center, WorkCenterResponse)
 
 
-@router.get("/", response_model=List[WorkCenterResponse])
+@router.get("/", response_model=RecordList[WorkCenterResponse])
 def get_work_centers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all work centers. Both admin and user can access.
+    Get all work centers, including custom column definitions. Both admin and user can access.
     """
     work_centers = db.query(WorkCenter).order_by(WorkCenter.id.asc()).all()
-    return work_centers
+    return catalog(db, "work_center", work_centers, WorkCenterResponse)
 
 
 @router.get("/{work_center_id}", response_model=WorkCenterResponse)
@@ -55,7 +59,7 @@ def get_work_center(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Work center not found"
         )
-    return work_center
+    return with_fields(db, "work_center", work_center, WorkCenterResponse)
 
 
 @router.put("/{work_center_id}", response_model=WorkCenterResponse)
@@ -76,12 +80,13 @@ def update_work_center(
         )
     
     update_data = work_center_update.model_dump(exclude_unset=True)
+    custom_fields = pop_custom(update_data)
     for field, value in update_data.items():
         setattr(work_center, field, value)
-    
+    apply_values(db, "work_center", work_center.id, custom_fields)
     db.commit()
     db.refresh(work_center)
-    return work_center
+    return with_fields(db, "work_center", work_center, WorkCenterResponse)
 
 
 @router.delete("/{work_center_id}", status_code=status.HTTP_204_NO_CONTENT)

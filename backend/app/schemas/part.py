@@ -24,6 +24,25 @@ class PartCreate(PartBase):
     pass
 
 
+class PartBulkItem(BaseModel):
+    part_number: str = Field(..., min_length=1, max_length=50)
+    part_name: str = Field(..., min_length=1, max_length=255)
+    size: Optional[str] = Field(None, max_length=100)
+    quantity: int = Field(..., gt=0)
+    part_type: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def quantity_is_integer(cls, value):
+        return as_whole_number(value)
+
+
+class PartBulkCreate(BaseModel):
+    product_id: int = Field(..., gt=0)
+    assembly_id: Optional[int] = Field(None, gt=0)
+    parts: list[PartBulkItem] = Field(..., min_length=1)
+
+
 class PartUpdate(BaseModel):
     product_id: Optional[int] = Field(None, gt=0)
     assembly_id: Optional[int] = Field(None, gt=0)

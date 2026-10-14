@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
-
 from app.database.session import get_db
 from app.models.machine import Machine
 from app.schemas.machine import MachineCreate, MachineUpdate, MachineResponse
 from app.core.dependencies import get_current_user
 from app.core.rbac import require_admin
 from app.models.user import User
+from app.schemas.listing import RecordList
+from app.services.custom_fields import apply_values, catalog, pop_custom, with_fields, with_fields_many
 
 router = APIRouter(prefix="/api/v1/machines", tags=["Machines"])
 
@@ -30,26 +30,30 @@ def create_machine(
             detail=f"Work center with id {machine_data.work_center_id} not found"
         )
     
-    db_machine = Machine(**machine_data.model_dump())
+    payload = machine_data.model_dump()
+    custom_fields = pop_custom(payload)
+    db_machine = Machine(**payload)
     db.add(db_machine)
+    db.flush()
+    apply_values(db, "machine", db_machine.id, custom_fields)
     db.commit()
     db.refresh(db_machine)
-    return db_machine
+    return with_fields(db, "machine", db_machine, MachineResponse)
 
 
-@router.get("/", response_model=List[MachineResponse])
+@router.get("/", response_model=RecordList[MachineResponse])
 def get_machines(
     work_center_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get machines, optionally for one work center.
+    Get machines, optionally for one work center, including custom column definitions.
     """
     query = db.query(Machine)
     if work_center_id is not None:
         query = query.filter(Machine.work_center_id == work_center_id)
-    return query.order_by(Machine.id.asc()).all()
+    return catalog(db, "machine", query.order_by(Machine.id.asc()).all(), MachineResponse)
 
 
 @router.get("/{machine_id}", response_model=MachineResponse)
@@ -67,7 +71,7 @@ def get_machine(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Machine not found"
         )
-    return machine
+    return with_fields(db, "machine", machine, MachineResponse)
 
 
 @router.put("/{machine_id}", response_model=MachineResponse)
@@ -89,6 +93,7 @@ def update_machine(
     
     # Check if work_center_id is being updated and if the new work center exists
     update_data = machine_update.model_dump(exclude_unset=True)
+    custom_fields = pop_custom(update_data)
     if 'work_center_id' in update_data:
         from app.models.work_center import WorkCenter
         work_center = db.query(WorkCenter).filter(WorkCenter.id == update_data['work_center_id']).first()
@@ -100,10 +105,10 @@ def update_machine(
     
     for field, value in update_data.items():
         setattr(machine, field, value)
-    
+    apply_values(db, "machine", machine.id, custom_fields)
     db.commit()
     db.refresh(machine)
-    return machine
+    return with_fields(db, "machine", machine, MachineResponse)
 
 
 @router.delete("/{machine_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -139,7 +144,7 @@ def delete_machine(
     return None
 
 
-@router.get("/work-center/{work_center_id}", response_model=List[MachineResponse])
+@router.get("/work-center/{work_center_id}", response_model=list[MachineResponse])
 def get_machines_by_work_center(
     work_center_id: int,
     db: Session = Depends(get_db),
@@ -157,4 +162,4 @@ def get_machines_by_work_center(
         )
     
     machines = db.query(Machine).filter(Machine.work_center_id == work_center_id).all()
-    return machines
+    return with_fields_many(db, "machine", machines, MachineResponse)

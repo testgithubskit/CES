@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Factory, LogOut, Package, Search, Users } from 'lucide-react'
+import { Factory, LogOut, Package, Search } from 'lucide-react'
 import { useAuth } from '../../hooks/use-auth'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { Avatar, AvatarFallback } from '../ui/avatar'
@@ -19,8 +19,7 @@ import { productsService } from '../../services/api/products'
 
 const pages = [
   { label: 'Products', href: '/products', icon: <Package /> },
-  { label: 'Work Centers', href: '/configuration/work-centers', icon: <Factory /> },
-  { label: 'Customers', href: '/configuration/customers', icon: <Users /> },
+  { label: 'Configuration', href: '/configuration?tab=work-centers', icon: <Factory /> },
 ]
 
 export function Header() {
@@ -57,7 +56,7 @@ export function Header() {
     {
       label: 'Products',
       items: products.map((product) => ({
-        label: `${product.product_number} ${product.product_name}`,
+        label: `${product.product_number} ${product.product_name} ${Object.values(product.custom_fields || {}).filter(Boolean).join(' ')}`.trim(),
         href: `/products/${product.id}`,
         icon: <Package />,
       })),
@@ -77,7 +76,7 @@ export function Header() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-foreground text-xs text-background">
+                <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                   {getInitials(user?.name || user?.email)}
                 </AvatarFallback>
               </Avatar>

@@ -137,7 +137,7 @@ export function CostEstimation() {
               />
               <Label htmlFor="include_overhead">Include Overhead</Label>
             </div>
-            <Button onClick={handleCalculate} disabled={calculating || !selectedProduct} className="w-full bg-brand-500 hover:bg-brand-600">
+            <Button onClick={handleCalculate} disabled={calculating || !selectedProduct} className="w-full bg-primary hover:bg-primary/90">
               {calculating ? 'Calculating...' : 'Calculate Cost'}
             </Button>
           </CardContent>
@@ -165,7 +165,7 @@ export function CostEstimation() {
                 </div>
                 <div className="border-t pt-4 flex justify-between items-center">
                   <span className="font-semibold">Total Cost (per unit)</span>
-                  <span className="text-2xl font-bold text-brand-500">${result.total_cost?.toFixed(2) || 0}</span>
+                  <span className="text-2xl font-bold text-primary">${result.total_cost?.toFixed(2) || 0}</span>
                 </div>
                 <div className="border-t pt-4 flex justify-between items-center">
                   <span className="font-semibold">Total Cost ({calculationData.quantity} units)</span>

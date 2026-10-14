@@ -34,6 +34,20 @@ def _safe_segment(value: str) -> str:
     return cleaned or "file"
 
 
+def _next_revision(db: Session, part_id: Optional[int], assembly_id: Optional[int]) -> str:
+    query = db.query(Document.version)
+    if part_id:
+        query = query.filter(Document.part_id == part_id)
+    else:
+        query = query.filter(Document.assembly_id == assembly_id)
+    highest = -1
+    for (value,) in query.all():
+        text = str(value or "").strip()
+        if text.isdigit():
+            highest = max(highest, int(text))
+    return f"{highest + 1:02d}"
+
+
 def _extension(filename: str) -> str:
     if "." not in filename:
         return ""
@@ -46,7 +60,7 @@ def upload_document(
     part_id: Optional[int] = Form(None),
     assembly_id: Optional[int] = Form(None),
     document_type: Optional[str] = Form(None),
-    version: str = Form(...),
+    version: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -81,7 +95,19 @@ def upload_document(
                 detail=f"Assembly with id {assembly_id} not found"
             )
     
-    file_extension = _extension(file.filename or "")
+    file_name = (file.filename or "").strip()
+    duplicate = db.query(Document).filter(
+        Document.part_id == part_id,
+        Document.assembly_id == assembly_id,
+        Document.file_name.ilike(file_name),
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This document is already uploaded"
+        )
+
+    file_extension = _extension(file_name)
     if file_extension not in EXTENSION_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,6 +120,7 @@ def upload_document(
             detail="Document type must be 2d or 3d"
         )
     resolved_type = document_type or EXTENSION_TYPES[file_extension]
+    version = _next_revision(db, part_id, assembly_id)
 
     file_content = file.file.read()
     if part_id:
@@ -271,6 +298,20 @@ def update_document(
         )
     
     update_data = document_update.model_dump(exclude_unset=True)
+    update_data.pop("version", None)
+    renamed = update_data.get("file_name")
+    if renamed and renamed.strip().lower() != (document.file_name or "").strip().lower():
+        taken = db.query(Document).filter(
+            Document.id != document.id,
+            Document.part_id == document.part_id,
+            Document.assembly_id == document.assembly_id,
+            Document.file_name.ilike(renamed.strip()),
+        ).first()
+        if taken:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This document is already uploaded"
+            )
     for field, value in update_data.items():
         setattr(document, field, value)
     

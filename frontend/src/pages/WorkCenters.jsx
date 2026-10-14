@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -11,7 +11,10 @@ import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { toast } from 'sonner'
 import { workCentersService } from '../services/api/workCenters'
-import { TablePager, usePage } from '../components/common/TablePager'
+import { TablePager, useMeasuredPage } from '../components/common/TablePager'
+import { useAuth } from '../hooks/use-auth'
+import { readList } from '../services/api/client'
+import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
 const emptyForm = { code: '', name: '', description: '' }
 
@@ -22,19 +25,32 @@ function errorMessage(error, fallback) {
   return fallback
 }
 
-export function WorkCenters() {
+export function WorkCenters({ embedded = false }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
+  const [fields, setFields] = useState([])
   const [workCenters, setWorkCenters] = useState([])
   const [loading, setLoading] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [formData, setFormData] = useState(emptyForm)
+  const [customValues, setCustomValues] = useState({})
+  const scrollerRef = useRef(null)
+  const columns = useMemo(() => [
+    { key: 'code', label: 'Code' },
+    { key: 'name', label: 'Work Center' },
+    { key: 'description', label: 'Description' },
+    ...fields.map((field) => ({ key: field.field_key, label: field.label, custom: true })),
+  ], [fields])
+  const shown = useShownColumns('ces-columns-work-center', columns)
 
   const loadWorkCenters = async () => {
     setLoading(true)
     try {
-      const data = await workCentersService.getAll()
-      setWorkCenters(Array.isArray(data) ? data : data.items || [])
+      const data = readList(await workCentersService.getAll())
+      setWorkCenters(data.items)
+      setFields(data.custom_columns)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to load work centers'))
     } finally {
@@ -52,6 +68,7 @@ export function WorkCenters() {
       code: formData.code.trim(),
       name: formData.name.trim(),
       description: formData.description.trim() || null,
+      custom_fields: customValues,
     }
     try {
       if (editingItem) {
@@ -84,6 +101,7 @@ export function WorkCenters() {
   const openCreate = () => {
     setEditingItem(null)
     setFormData(emptyForm)
+    setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, ''])))
     setDialogOpen(true)
   }
 
@@ -94,55 +112,59 @@ export function WorkCenters() {
       name: item.name || '',
       description: item.description || '',
     })
+    setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, item.custom_fields?.[field.field_key] || ''])))
     setDialogOpen(true)
   }
 
-  const tools = useTableTools(workCenters, ['code', 'name', 'description'])
-  const page = usePage(tools.rows)
+  const tools = useTableTools(workCenters.map((item) => ({ ...item, ...(item.custom_fields || {}) })), columns.map((column) => column.key))
+  const page = useMeasuredPage(tools.rows, scrollerRef)
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold">Work Centers</h1>
-        </div>
+    <div className={`flex flex-col gap-3 ${embedded ? 'h-full min-h-0' : 'h-[calc(100vh-2rem)]'}`}>
+      <div className="flex items-center gap-3">
+        {!embedded && <h1 className="font-heading text-2xl font-bold">Work Centers</h1>}
         <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search work centers" />
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Work Center
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <TableToolsMenu entityType="work_center" isAdmin={isAdmin} fields={fields} onFields={loadWorkCenters} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Work Centers" />
+          <Button className="h-8" onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Work Center
+          </Button>
+        </div>
       </div>
 
       <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-16">Sl No</TableHead>
-                <SortHead label="Code" column="code" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Work Center" column="name" sort={tools.sort} onSort={tools.toggleSort} />
-                <SortHead label="Description" column="description" sort={tools.sort} onSort={tools.toggleSort} />
-                <TableHead className="text-right">Actions</TableHead>
+                {shown.visible.map((column) => (
+                  <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
+                ))}
+                <TableHead className="w-20 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">Loading...</TableCell>
+                  <TableCell colSpan={shown.visible.length + 2} className="text-center">Loading...</TableCell>
                 </TableRow>
-              ) : workCenters.length === 0 ? (
+              ) : page.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">No work centers found</TableCell>
+                  <TableCell colSpan={shown.visible.length + 2} className="text-center text-muted-foreground">No work centers found</TableCell>
                 </TableRow>
               ) : (
                 page.rows.map((item, index) => (
                   <TableRow key={item.id} className="cursor-pointer" onClick={() => navigate(`/configuration/work-centers/${item.id}`)}>
                     <TableCell>{(page.page - 1) * page.pageSize + index + 1}</TableCell>
-                    <TableCell>{item.code}</TableCell>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell>{item.description || '-'}</TableCell>
-                    <TableCell onClick={(event) => event.stopPropagation()}>
+                    {shown.visible.map((column) => (
+                      <TableCell key={column.key} className={column.key === 'name' ? 'font-medium' : ''}>
+                        {column.custom ? (item.custom_fields?.[column.key] || '-') : (item[column.key] || '-')}
+                      </TableCell>
+                    ))}
+                    <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                       <RowActions onEdit={() => openEdit(item)} onDelete={() => handleDelete(item.id)} />
                     </TableCell>
                   </TableRow>
@@ -173,6 +195,7 @@ export function WorkCenters() {
               <Label htmlFor="description">Description</Label>
               <Input id="description" name="description" value={formData.description} autoComplete="off" onChange={(event) => setFormData({ ...formData, description: event.target.value })} />
             </div>
+            <CustomFieldInputs fields={fields} values={customValues} onChange={setCustomValues} />
             <DialogFooter>
               <Button type="submit">{editingItem ? 'Update' : 'Create'}</Button>
             </DialogFooter>

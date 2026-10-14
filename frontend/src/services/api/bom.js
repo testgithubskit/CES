@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { readList, shareGet } from './client'
 
 export const bomService = {
   createAssembly: async (assemblyData) => {
@@ -59,12 +59,6 @@ export const lookupService = {
     const response = await apiClient.get('/api/v1/part-types')
     return response.data
   },
-  workCenters: async () => {
-    const response = await apiClient.get('/api/v1/work-centers')
-    return response.data
-  },
-  machines: async () => {
-    const response = await apiClient.get('/api/v1/machines')
-    return response.data
-  },
+  workCenters: async () => readList(await shareGet('/api/v1/work-centers')).items,
+  machines: async () => readList(await shareGet('/api/v1/machines')).items,
 }

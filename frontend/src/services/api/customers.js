@@ -1,10 +1,7 @@
-import apiClient from './client'
+import apiClient, { shareGet } from './client'
 
 export const customersService = {
-  getAll: async (params = {}) => {
-    const response = await apiClient.get('/api/v1/customers', { params })
-    return response.data
-  },
+  getAll: (params = {}) => shareGet('/api/v1/customers', { params }),
 
   getById: async (id) => {
     const response = await apiClient.get(`/api/v1/customers/${id}`)

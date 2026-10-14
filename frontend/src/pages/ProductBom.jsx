@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowLeft01Icon, CubeIcon } from '@hugeicons/core-free-icons'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronRight, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Hint, Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
+import { ArrowLeft, Box, ChevronDown, ChevronRight, FileDown, MoreVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -15,6 +14,8 @@ import { bomService, lookupService, operationsService } from '../services/api/bo
 import { documentsService } from '../services/api/documents'
 import { PartPreview } from '../components/bom/PartPreview'
 import { ProductCost } from '../components/bom/ProductCost'
+import { BulkPartsDialog } from '../components/bom/BulkPartsDialog'
+import { downloadBom } from '../components/bom/bomExport'
 import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { TablePager, usePage } from '../components/common/TablePager'
@@ -41,13 +42,6 @@ function fileKind(document) {
 
 function previewKind(document) {
   return ['stl', 'step', 'stp'].includes(fileKind(document)) ? '3d' : '2d'
-}
-
-function suggestDocumentType(fileName) {
-  const extension = fileName.split('.').pop()?.toLowerCase()
-  if (extension === 'pdf') return '2d'
-  if (['stl', 'step', 'stp'].includes(extension)) return '3d'
-  return '2d'
 }
 
 const emptyPart = () => ({ part_number: '', part_name: '', quantity: '1', part_type_id: '' })
@@ -140,9 +134,10 @@ export function ProductBom() {
   const [selectedPart, setSelectedPart] = useState(null)
   const [operations, setOperations] = useState([])
   const [documents, setDocuments] = useState([])
-  const [previewMode, setPreviewMode] = useState('2d')
-  const [previewDocId, setPreviewDocId] = useState(null)
-  const [previewFile, setPreviewFile] = useState({ id: null, data: null })
+  const [doc2dId, setDoc2dId] = useState(null)
+  const [doc3dId, setDoc3dId] = useState(null)
+  const [file2d, setFile2d] = useState({ id: null, data: null })
+  const [file3d, setFile3d] = useState({ id: null, data: null })
   const [expanded, setExpanded] = useState({})
   const [dialog, setDialog] = useState(null)
   const [assemblyRows, setAssemblyRows] = useState([{ assembly_number: '', assembly_name: '' }])
@@ -151,7 +146,10 @@ export function ProductBom() {
   const [documentRows, setDocumentRows] = useState([emptyDocument()])
   const [editingOperation, setEditingOperation] = useState(null)
   const [detailTab, setDetailTab] = useState('plan')
-  const [zoomed, setZoomed] = useState(false)
+  const [zoomKind, setZoomKind] = useState(null)
+  const [bulk, setBulk] = useState(null)
+  const fileCache = useRef(new Map())
+  const fileJobs = useRef(new Map())
   const operationTools = useTableTools(operations, ['operation_number', 'operation_name', 'operation_type', 'work_center_name', 'machine_name'])
   const documentTools = useTableTools(documents, ['file_name', 'document_type', 'version', 'file_type'])
   const operationPage = usePage(operationTools.rows, 420)
@@ -169,6 +167,22 @@ export function ProductBom() {
     }
   }, [id])
 
+  const loadFile = (documentId) => {
+    if (fileCache.current.has(documentId)) return Promise.resolve(fileCache.current.get(documentId))
+    if (fileJobs.current.has(documentId)) return fileJobs.current.get(documentId)
+    const job = documentsService.downloadDocument(documentId).then(async (blob) => {
+      const buffer = new Uint8Array(await blob.arrayBuffer())
+      fileCache.current.set(documentId, buffer)
+      fileJobs.current.delete(documentId)
+      return buffer
+    }).catch((error) => {
+      fileJobs.current.delete(documentId)
+      throw error
+    })
+    fileJobs.current.set(documentId, job)
+    return job
+  }
+
   const rememberPart = (partId, updater) => {
     setHierarchy((current) => current && updatePart(current, partId, updater))
     setSelectedPart((current) => (current?.id === partId ? updater(current) : current))
@@ -176,13 +190,16 @@ export function ProductBom() {
 
   const openPart = (part) => {
     const partDocuments = part.documents || []
-    const chosen = partDocuments.find((document) => previewKind(document) === '2d') || partDocuments[0] || null
+    const next2d = partDocuments.find((document) => previewKind(document) === '2d')?.id ?? null
+    const next3d = partDocuments.find((document) => previewKind(document) === '3d')?.id ?? null
     setShowProduct(false)
     setSelectedPart(part)
     setOperations(part.operations || [])
     setDocuments(partDocuments)
-    setPreviewMode(chosen ? previewKind(chosen) : '2d')
-    setPreviewDocId(chosen?.id ?? null)
+    setDoc2dId(next2d)
+    setDoc3dId(next3d)
+    setFile2d(next2d && fileCache.current.has(next2d) ? { id: next2d, data: fileCache.current.get(next2d) } : { id: next2d, data: null })
+    setFile3d(next3d && fileCache.current.has(next3d) ? { id: next3d, data: fileCache.current.get(next3d) } : { id: next3d, data: null })
   }
 
   const ensurePartTypes = async () => {
@@ -202,40 +219,47 @@ export function ProductBom() {
     setMachines(machineList)
   }
 
-  const previewDocuments = useMemo(() => {
-    return documents.filter((document) => previewKind(document) === previewMode)
-  }, [documents, previewMode])
+  const docs2d = useMemo(() => documents.filter((document) => previewKind(document) === '2d'), [documents])
+  const docs3d = useMemo(() => documents.filter((document) => previewKind(document) === '3d'), [documents])
 
   useEffect(() => {
-    setPreviewDocId((current) => (current && previewDocuments.some((document) => document.id === current) ? current : previewDocuments[0]?.id ?? null))
-  }, [previewDocuments])
+    setDoc2dId((current) => (current && docs2d.some((document) => document.id === current) ? current : docs2d[0]?.id ?? null))
+  }, [docs2d])
 
-  if (previewFile.id !== (previewDocId ?? null)) {
-    setPreviewFile({ id: previewDocId ?? null, data: null })
-  }
+  useEffect(() => {
+    setDoc3dId((current) => (current && docs3d.some((document) => document.id === current) ? current : docs3d[0]?.id ?? null))
+  }, [docs3d])
 
   useEffect(() => {
     let cancelled = false
-    const loadPreview = async () => {
-      if (!previewDocId) return
+    const load = async (documentId, setFile) => {
+      if (!documentId) {
+        setFile({ id: null, data: null })
+        return
+      }
+      if (fileCache.current.has(documentId)) {
+        setFile({ id: documentId, data: fileCache.current.get(documentId) })
+        return
+      }
       try {
-        const blob = await documentsService.downloadDocument(previewDocId)
-        const buffer = new Uint8Array(await blob.arrayBuffer())
-        if (!cancelled) setPreviewFile({ id: previewDocId, data: buffer })
+        const buffer = await loadFile(documentId)
+        if (!cancelled) setFile({ id: documentId, data: buffer })
       } catch (error) {
         if (!cancelled) {
-          setPreviewFile({ id: previewDocId, data: null })
+          setFile({ id: documentId, data: null })
           toast.error(errorMessage(error, 'Failed to load preview'))
         }
       }
     }
-    loadPreview()
+    load(doc2dId, setFile2d)
+    load(doc3dId, setFile3d)
     return () => {
       cancelled = true
     }
-  }, [previewDocId])
+  }, [doc2dId, doc3dId])
 
-  const previewDocument = documents.find((document) => document.id === previewDocId)
+  const document2d = documents.find((document) => document.id === doc2dId)
+  const document3d = documents.find((document) => document.id === doc3dId)
 
   const openAssemblyDialog = (parentAssemblyId = null) => {
     setAssemblyRows([{ assembly_number: '', assembly_name: '' }])
@@ -285,9 +309,14 @@ export function ProductBom() {
       file: null,
       fileName: document.file_name,
       document_type: document.document_type || '2d',
-      version: document.version || '',
+      version: document.version || '00',
       inputKey: Date.now(),
-    } : emptyDocument()])
+    } : ['2d', '3d'].map((documentType, index) => ({
+      ...emptyDocument(),
+      document_type: documentType,
+      version: nextRevision(documents.map((item) => item.version)),
+      inputKey: index + 1,
+    }))])
     setDialog({ type: 'document', editing: document })
   }
 
@@ -430,8 +459,22 @@ export function ProductBom() {
         setDocuments(next)
         rememberPart(selectedPart.id, (part) => ({ ...part, documents: next }))
       } else {
+        const chosen = documentRows.filter((row) => row.file)
+        if (!chosen.length) {
+          toast.error('Choose a 2D or 3D file')
+          return
+        }
+        const taken = new Set(documents.map((document) => document.file_name.trim().toLowerCase()))
+        for (const row of chosen) {
+          const name = (row.file.name || '').trim().toLowerCase()
+          if (!name || taken.has(name)) {
+            toast.error('This document is already uploaded for this part')
+            return
+          }
+          taken.add(name)
+        }
         const created = []
-        for (const row of documentRows) {
+        for (const row of chosen) {
           created.push(await documentsService.uploadDocument({
             partId: selectedPart.id,
             file: row.file,
@@ -491,7 +534,8 @@ export function ProductBom() {
       await documentsService.deleteDocument(document.id)
       const next = documents.filter((item) => item.id !== document.id)
       setDocuments(next)
-      if (previewDocId === document.id) setPreviewDocId(null)
+      if (doc2dId === document.id) setDoc2dId(null)
+      if (doc3dId === document.id) setDoc3dId(null)
       rememberPart(selectedPart.id, (part) => ({ ...part, documents: next }))
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete document'))
@@ -517,12 +561,12 @@ export function ProductBom() {
   const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }))
 
   const renderPart = (part, depth) => (
-    <div key={`part-${part.id}`} className={`flex items-start gap-2 px-2 py-1 hover:bg-accent ${selectedPart?.id === part.id ? 'bg-accent' : ''}`} style={{ paddingLeft: 28 + depth * 14 }}>
-      <button type="button" className="flex min-w-0 flex-1 items-start gap-2 text-left" onClick={() => openPart(part)}>
-        <HugeiconsIcon icon={CubeIcon} size={16} className="mt-0.5 shrink-0" />
+    <div key={`part-${part.id}`} className={`group ml-1 flex items-center gap-1 rounded-lg py-1 pr-1 transition-colors hover:bg-accent ${selectedPart?.id === part.id ? 'bg-accent' : ''}`}>
+      <button type="button" className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 text-left" onClick={() => openPart(part)}>
+        <Box className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold">{part.part_name}</span>
-          <span className="block truncate text-xs text-muted-foreground">{part.part_number}{part.description ? ` (${part.description})` : ''} · Qty {Number(part.quantity)}</span>
+          <span className="block truncate text-xs text-muted-foreground">{part.part_number}</span>
         </span>
       </button>
       <NodeMenu>
@@ -537,24 +581,25 @@ export function ProductBom() {
     const isOpen = expanded[key] === true
     return (
       <div key={key}>
-        <div className="flex items-start gap-1 px-2 py-1 text-sm hover:bg-accent" style={{ paddingLeft: 8 + depth * 14 }}>
-          <button type="button" onClick={() => toggle(key)} className="mt-0.5 p-0.5">
-            {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <div className="group ml-1 flex items-center gap-1 rounded-lg py-1 pr-1 text-sm transition-colors hover:bg-accent">
+          <button type="button" className="flex min-w-0 flex-1 items-start gap-1 rounded-md px-1 text-left" onClick={() => toggle(key)}>
+            {isOpen ? <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0" />}
+            <span className="min-w-0">
+              <span className="block truncate font-semibold">{assembly.assembly_name}</span>
+              <span className="block truncate text-xs text-muted-foreground">{assembly.assembly_number}</span>
+            </span>
           </button>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold">{assembly.assembly_name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{assembly.assembly_number}</span>
-          </span>
-          <span className="mt-0.5 border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase">Assembly</span>
+          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">{depth > 0 ? 'Sub Assembly' : 'Assembly'}</span>
           <NodeMenu>
             <DropdownMenuItem onClick={() => openAssemblyDialog(assembly.id)}><Plus className="mr-2 h-4 w-4" />Add Sub Assembly</DropdownMenuItem>
             <DropdownMenuItem onClick={() => openPartDialog(assembly.id)}><Plus className="mr-2 h-4 w-4" />Add Part</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setBulk({ assemblyId: assembly.id, title: assembly.assembly_name })}><Upload className="mr-2 h-4 w-4" />Upload Parts</DropdownMenuItem>
             <DropdownMenuItem onClick={() => openEditAssembly(assembly)}><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => deleteAssembly(assembly)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => deleteAssembly(assembly)} className="text-primary"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
           </NodeMenu>
         </div>
         {isOpen && (
-          <div>
+          <div className="ml-4 border-l border-border">
             {assembly.sub_assemblies?.map((child) => renderAssembly(child, depth + 1))}
             {assembly.parts?.map((part) => renderPart(part, depth + 1))}
           </div>
@@ -569,32 +614,74 @@ export function ProductBom() {
 
   return (
     <div className="-m-4 flex h-screen min-h-0 overflow-hidden">
-      <section className="flex w-[34rem] shrink-0 flex-col border-r border-border bg-background">
-        <div className="flex items-center gap-2 border-b border-border px-2 py-2">
-          <button type="button" className="p-1" onClick={() => navigate('/products')} aria-label="Back to products">
-            <HugeiconsIcon icon={ArrowLeft01Icon} size={16} />
+      <section className="flex w-[28rem] shrink-0 flex-col border-r border-border bg-background">
+        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-2">
+          <Hint label="Products">
+            <button type="button" className="rounded-md p-1 transition-colors hover:bg-accent" onClick={() => navigate('/products')} aria-label="Back to products">
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          </Hint>
+          <h1 className="truncate font-heading text-lg font-bold">Bill of Materials</h1>
+          <a href="/parts-template.docx" download="PartsTemplate.docx" className="ml-auto inline-flex items-center gap-1 text-xs font-semibold">
+            <FileDown className="h-3.5 w-3.5" />Template
+          </a>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold">Export</button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => downloadBom(hierarchy, 'pdf')}>PDF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadBom(hierarchy, 'excel')}>Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className={`mx-2 mt-2 flex items-center gap-1 rounded-lg py-1 pr-1 text-sm transition-colors hover:bg-accent ${showProduct ? 'bg-accent' : ''}`}>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-start gap-1 text-left"
+            onClick={() => {
+              setExpanded((current) => ({ ...current, product: current.product === false }))
+              setSelectedPart(null)
+              setShowProduct(true)
+            }}
+          >
+            {expanded.product === false ? <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0" />}
+            <span className="min-w-0">
+              <span className="block truncate font-semibold">{hierarchy.product_name}</span>
+              <span className="block truncate text-xs text-muted-foreground">{hierarchy.product_number}</span>
+            </span>
           </button>
-          <button type="button" className={`min-w-0 flex-1 px-1 py-1 text-left ${showProduct ? 'bg-accent' : ''}`} onClick={() => { setSelectedPart(null); setShowProduct(true) }}>
-            <span className="block truncate text-sm font-bold">{hierarchy.product_name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{hierarchy.product_number} · Qty {Number(hierarchy.quantity)}</span>
-          </button>
-          <span className="shrink-0 border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase">Product</span>
+          <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">Product</span>
           <NodeMenu>
             <DropdownMenuItem onClick={() => openAssemblyDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Assembly</DropdownMenuItem>
             <DropdownMenuItem onClick={() => openPartDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Part</DropdownMenuItem>
-            <DropdownMenuItem onClick={deleteProduct} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Delete Product</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setBulk({ assemblyId: null, title: hierarchy.product_name })}><Upload className="mr-2 h-4 w-4" />Upload Parts</DropdownMenuItem>
+            <DropdownMenuItem onClick={deleteProduct} className="text-primary"><Trash2 className="mr-2 h-4 w-4" />Delete Product</DropdownMenuItem>
           </NodeMenu>
         </div>
-        <div className="flex-1 overflow-auto p-2">
-          {hierarchy.assemblies?.map((assembly) => renderAssembly(assembly, 0))}
-          {hierarchy.direct_parts?.map((part) => renderPart(part, 0))}
-          {!hierarchy.assemblies?.length && !hierarchy.direct_parts?.length && (
-            <p className="px-2 py-4 text-sm text-muted-foreground">Add an assembly or a part under this product.</p>
+        <div className="flex-1 overflow-auto py-1">
+          {expanded.product !== false && (
+            <div className="ml-5 border-l border-border pb-2">
+              {hierarchy.assemblies?.map((assembly) => renderAssembly(assembly, 0))}
+              {hierarchy.direct_parts?.map((part) => renderPart(part, 0))}
+              {!hierarchy.assemblies?.length && !hierarchy.direct_parts?.length && (
+                <p className="px-2 py-4 text-sm text-muted-foreground">Add an assembly or a part under this product.</p>
+              )}
+            </div>
           )}
         </div>
       </section>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex h-16 shrink-0 items-center gap-4 border-b border-border px-3 text-sm">
+          {selectedPart && !showProduct && (
+            <>
+              <span className="truncate font-bold">{selectedPart.part_number}</span>
+              <span className="truncate">{selectedPart.part_name}</span>
+              <span className="shrink-0 text-muted-foreground">Qty {Number(selectedPart.quantity)}</span>
+            </>
+          )}
+        </div>
         {showProduct ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ProductCost productId={id} />
@@ -603,36 +690,40 @@ export function ProductBom() {
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select the product or a part</div>
         ) : (
           <>
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2">
-                <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold">{selectedPart.part_name}</h2>
-                  <p className="truncate text-xs text-muted-foreground">{selectedPart.part_number} · Qty {Number(selectedPart.quantity)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex border border-border">
-                    {['2d', '3d'].map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setPreviewMode(mode)}
-                        className={`px-2.5 py-1 text-xs font-bold uppercase ${previewMode === mode ? 'bg-foreground text-background' : 'text-muted-foreground'}`}
-                      >
-                        {mode}
-                      </button>
-                    ))}
-                  </div>
-                  <select className="h-8 max-w-[220px] border border-input bg-background px-2 text-xs" value={previewDocId || ''} onChange={(event) => setPreviewDocId(event.target.value ? Number(event.target.value) : null)}>
-                    {previewDocuments.length === 0 && <option value="">No document</option>}
-                    {previewDocuments.map((document) => (
-                      <option key={document.id} value={document.id}>{document.file_name} · Rev {document.version}</option>
+            <div className="flex min-h-0 w-full flex-[2] border-b border-border">
+              <div className="flex w-1/2 min-w-0 flex-col border-r border-border">
+                <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1">
+                  <span className="text-xs font-bold">2D</span>
+                  <select className="h-7 min-w-0 flex-1 border border-input bg-background px-2 text-xs" value={doc2dId || ''} onChange={(event) => setDoc2dId(event.target.value ? Number(event.target.value) : null)}>
+                    {docs2d.length === 0 && <option value="">No document</option>}
+                    {docs2d.map((document) => (
+                      <option key={document.id} value={document.id}>{document.file_name}</option>
                     ))}
                   </select>
-                  <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!previewDocId} onClick={() => setZoomed(true)}>Zoom</button>
+                  <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc2dId} onClick={() => setZoomKind('2d')}>Zoom</button>
+                </div>
+                <div className="relative min-h-0 flex-1">
+                  <div className="absolute inset-0">
+                    <PartPreview key={`2d-${doc2dId || 'none'}`} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.id === doc2dId ? file2d.data : null} />
+                  </div>
                 </div>
               </div>
-            <div className="relative min-h-0 flex-[7] overflow-hidden border-b border-border bg-background">
-              <div className="absolute inset-0">
-                <PartPreview key={`${previewMode}-${previewDocId || 'none'}`} fileType={previewDocument?.file_type} fileName={previewDocument?.file_name} data={previewFile.data} />
+              <div className="flex w-1/2 min-w-0 flex-col">
+                <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1">
+                  <span className="text-xs font-bold">3D</span>
+                  <select className="h-7 min-w-0 flex-1 border border-input bg-background px-2 text-xs" value={doc3dId || ''} onChange={(event) => setDoc3dId(event.target.value ? Number(event.target.value) : null)}>
+                    {docs3d.length === 0 && <option value="">No document</option>}
+                    {docs3d.map((document) => (
+                      <option key={document.id} value={document.id}>{document.file_name}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc3dId} onClick={() => setZoomKind('3d')}>Zoom</button>
+                </div>
+                <div className="relative min-h-0 flex-1">
+                  <div className="absolute inset-0">
+                    <PartPreview key={`3d-${doc3dId || 'none'}`} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.id === doc3dId ? file3d.data : null} />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -647,7 +738,7 @@ export function ProductBom() {
 
             {detailTab === 'plan' && (
             <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="mb-2 flex items-center justify-end gap-2">
                 <TableSearch value={operationTools.query} onChange={operationTools.setQuery} placeholder="Search operations" />
                 <Button size="sm" className="h-7" onClick={() => openOperationDialog()}>
                   <Plus className="mr-1 h-3.5 w-3.5" />Create Operation
@@ -691,7 +782,7 @@ export function ProductBom() {
 
             {detailTab === 'documents' && (
             <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="mb-2 flex items-center justify-end gap-2">
                 <TableSearch value={documentTools.query} onChange={documentTools.setQuery} placeholder="Search documents" />
                 <Button size="sm" className="h-7" onClick={() => openDocumentDialog()}>
                   <Plus className="mr-1 h-3.5 w-3.5" />Upload Document
@@ -712,8 +803,8 @@ export function ProductBom() {
                     <TableRow><TableCell colSpan={5}>No documents yet</TableCell></TableRow>
                   ) : documentPage.rows.map((document) => (
                     <TableRow key={document.id} className="cursor-pointer" onClick={() => {
-                      setPreviewMode(previewKind(document))
-                      setPreviewDocId(document.id)
+                      if (previewKind(document) === '3d') setDoc3dId(document.id)
+                      else setDoc2dId(document.id)
                     }}>
                       <TableCell>{document.file_name}</TableCell>
                       <TableCell className="uppercase">{document.document_type}</TableCell>
@@ -734,13 +825,25 @@ export function ProductBom() {
         )}
       </section>
 
-      <Dialog open={zoomed} onOpenChange={setZoomed}>
+      <BulkPartsDialog
+        open={Boolean(bulk)}
+        productId={id}
+        assemblyId={bulk?.assemblyId}
+        title={bulk?.title || hierarchy.product_name}
+        onOpenChange={(open) => !open && setBulk(null)}
+        onCreated={() => {
+          productsService.getHierarchy(id).then(setHierarchy).catch((error) => toast.error(errorMessage(error, 'Failed to refresh BOM')))
+        }}
+      />
+
+      <Dialog open={Boolean(zoomKind)} onOpenChange={(open) => !open && setZoomKind(null)}>
         <DialogContent className="h-[90vh] max-w-6xl">
           <DialogHeader>
-            <DialogTitle>{selectedPart?.part_name}</DialogTitle>
+            <DialogTitle>{selectedPart?.part_name} · {zoomKind === '3d' ? '3D' : '2D'}</DialogTitle>
           </DialogHeader>
           <div className="h-[calc(90vh-7rem)] min-h-0">
-            {zoomed && <PartPreview key={`zoom-${previewMode}-${previewDocId || 'none'}`} fileType={previewDocument?.file_type} fileName={previewDocument?.file_name} data={previewFile.data} />}
+            {zoomKind === '2d' && <PartPreview key={`zoom-2d-${doc2dId || 'none'}`} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.data} />}
+            {zoomKind === '3d' && <PartPreview key={`zoom-3d-${doc3dId || 'none'}`} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.data} />}
           </div>
         </DialogContent>
       </Dialog>
@@ -863,39 +966,11 @@ export function ProductBom() {
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>{dialog?.editing ? 'Edit Part Document' : 'Upload Part Document'}</DialogTitle></DialogHeader>
           <form onSubmit={saveDocuments} className="space-y-3" autoComplete="off">
-            {documentRows.map((row, index) => (
+            {dialog?.editing ? documentRows.map((row, index) => (
               <div key={row.inputKey + '-' + index} className="space-y-3 border border-border p-3">
                 <div className="space-y-1">
-                  <Label>{dialog?.editing ? 'Document name' : 'File'}</Label>
-                  {dialog?.editing ? (
-                    <Input value={row.fileName} required onChange={(event) => updateRow(setDocumentRows, index, { fileName: event.target.value })} />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        key={row.inputKey}
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.stl,.step,.stp"
-                        required={!row.file}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] || null
-                          updateRow(setDocumentRows, index, {
-                            file,
-                            fileName: file?.name || '',
-                            document_type: file ? suggestDocumentType(file.name) : row.document_type,
-                          })
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={!row.file}
-                        onClick={() => updateRow(setDocumentRows, index, { file: null, fileName: '', inputKey: Date.now() })}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  )}
-                  {!dialog?.editing && <p className="text-xs text-muted-foreground">{row.fileName || 'No file selected'}</p>}
+                  <Label>Document name</Label>
+                  <Input value={row.fileName} required onChange={(event) => updateRow(setDocumentRows, index, { fileName: event.target.value })} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -907,16 +982,32 @@ export function ProductBom() {
                   </div>
                   <div className="space-y-1">
                     <Label>Revision</Label>
-                    <Input placeholder="Revision" required value={row.version} autoComplete="off" onChange={(event) => updateRow(setDocumentRows, index, { version: event.target.value })} />
+                    <Input value={row.version} readOnly />
                   </div>
                 </div>
-                {documentRows.length > 1 && (
-                  <Button type="button" variant="outline" onClick={() => setDocumentRows((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}>Remove</Button>
-                )}
               </div>
-            ))}
-            {!dialog?.editing && (
-              <Button type="button" variant="outline" onClick={() => setDocumentRows((rows) => [...rows, emptyDocument()])}>Add another</Button>
+            )) : (
+              <div className="grid grid-cols-2 gap-3">
+                {documentRows.map((row, index) => (
+                  <FileDrop
+                    key={row.document_type}
+                    label={row.document_type === '3d' ? '3D' : '2D'}
+                    accept={row.document_type === '3d' ? '.stl,.step,.stp' : '.pdf,.png,.jpg,.jpeg'}
+                    fileName={row.fileName}
+                    onFile={(file) => {
+                      if (file) {
+                        const extension = file.name.split('.').pop()?.toLowerCase()
+                        const allowed = row.document_type === '3d' ? ['stl', 'step', 'stp'] : ['pdf', 'png', 'jpg', 'jpeg']
+                        if (!allowed.includes(extension)) {
+                          toast.error(row.document_type === '3d' ? 'Choose an STL or STEP file' : 'Choose a PDF or image file')
+                          return
+                        }
+                      }
+                      updateRow(setDocumentRows, index, { file, fileName: file?.name || '', inputKey: Date.now() })
+                    }}
+                  />
+                ))}
+              </div>
             )}
             <DialogFooter><Button type="submit">{dialog?.editing ? 'Save' : 'Upload'}</Button></DialogFooter>
           </form>
@@ -926,19 +1017,62 @@ export function ProductBom() {
   )
 }
 
+function FileDrop({ label, accept, fileName, onFile }) {
+  const [over, setOver] = useState(false)
+  const inputRef = useRef(null)
+  const take = (fileList) => {
+    const file = fileList?.[0]
+    if (file) onFile(file)
+  }
+  return (
+    <div
+      className={`flex min-h-36 flex-col items-center justify-center gap-2 border border-dashed px-3 py-4 text-center ${over ? 'bg-accent' : ''}`}
+      onDragOver={(event) => {
+        event.preventDefault()
+        setOver(true)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault()
+        setOver(false)
+        take(event.dataTransfer.files)
+      }}
+    >
+      <span className="text-sm font-bold">{label}</span>
+      <span className="text-xs text-muted-foreground">{fileName || 'Drag and drop a file here'}</span>
+      <Button type="button" variant="outline" className="h-8" onClick={() => inputRef.current?.click()}>Choose file</Button>
+      {fileName && <Button type="button" variant="ghost" className="h-7" onClick={() => onFile(null)}>Clear</Button>}
+      <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(event) => { take(event.target.files); event.target.value = '' }} />
+    </div>
+  )
+}
+
 function updateRow(setter, index, patch) {
   setter((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
+}
+
+function nextRevision(versions) {
+  const highest = versions.reduce((max, version) => {
+    const parsed = Number.parseInt(String(version ?? '').trim(), 10)
+    return Number.isNaN(parsed) ? max : Math.max(max, parsed)
+  }, -1)
+  return String(highest + 1).padStart(2, '0')
 }
 
 function NodeMenu({ children }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" type="button">
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" type="button" className="h-7 w-7 rounded-md opacity-70 transition-opacity hover:opacity-100" aria-label="Actions">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Actions</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="rounded-lg">{children}</DropdownMenuContent>
     </DropdownMenu>
   )
 }

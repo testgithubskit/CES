@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/use-auth'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { Lock, Mail, ArrowRight } from 'lucide-react'
+import { Logo } from '../components/common/Logo'
 
 export function SignIn() {
   const [formData, setFormData] = useState({
@@ -46,20 +47,18 @@ export function SignIn() {
       transition={{ duration: 0.5 }}
     >
       <Card className="border-border bg-card shadow-sm">
-        <CardHeader className="space-y-1 text-center pb-8">
-          
-          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-brand-500 to-brand-600 bg-clip-text text-transparent">
-            Cost Estimation Software
-          </CardTitle>
-          <CardDescription className="pt-2 text-base">Sign in to your account</CardDescription>
+        <CardHeader className="space-y-1 pb-4">
+          <Logo tone="blue" className="mx-auto mb-2 h-28 w-44" />
+          <CardTitle className="text-left text-3xl font-bold leading-none">Sign in</CardTitle>
+          <CardDescription className="text-left text-base leading-tight">Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="off">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
-              className="space-y-2"
+              className="space-y-1"
             >
               <Label htmlFor="email" className="text-sm font-medium">Email</Label>
               <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -82,7 +81,7 @@ export function SignIn() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
-              className="space-y-2"
+              className="space-y-1"
             >
               <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <div className="flex h-12 items-center gap-2 border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -108,7 +107,7 @@ export function SignIn() {
             >
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+                className="h-12 w-full bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
                 disabled={loading}
               >
                 {loading ? (
@@ -128,20 +127,6 @@ export function SignIn() {
               </Button>
             </motion.div>
           </form>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="mt-6 text-center text-sm"
-          >
-            Don't have an account?{' '}
-            <Link
-              to="/signup"
-              className="font-semibold underline-offset-2 hover:underline"
-            >
-              Sign up
-            </Link>
-          </motion.div>
         </CardContent>
       </Card>
     </motion.div>

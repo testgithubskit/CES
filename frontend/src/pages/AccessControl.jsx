@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Card, CardContent } from '../components/ui/card'
@@ -9,26 +9,39 @@ import { Label } from '../components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
-import { TablePager, usePage } from '../components/common/TablePager'
+import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { useAuth } from '../hooks/use-auth'
-import apiClient from '../services/api/client'
+import apiClient, { readList, shareGet } from '../services/api/client'
+import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
 const emptyForm = { name: '', email: '', role: 'user', is_active: true, password: '' }
 
-export function AccessControl() {
+export function AccessControl({ embedded = false }) {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
-  const tools = useTableTools(users, ['name', 'email', 'role'])
-  const page = usePage(tools.rows, 220)
+  const [customValues, setCustomValues] = useState({})
+  const scrollerRef = useRef(null)
+  const [fields, setFields] = useState([])
+  const columns = useMemo(() => [
+    { key: 'name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'role', label: 'Role' },
+    { key: 'is_active', label: 'Status' },
+    ...fields.map((field) => ({ key: field.field_key, label: field.label, custom: true })),
+  ], [fields])
+  const shown = useShownColumns('ces-columns-user', columns)
+  const tools = useTableTools(users.map((item) => ({ ...item, ...(item.custom_fields || {}), is_active: item.is_active ? 'Active' : 'Inactive' })), columns.map((column) => column.key))
+  const page = useMeasuredPage(tools.rows, scrollerRef)
 
   const load = async () => {
     setLoading(true)
     try {
-      const response = await apiClient.get('/api/v1/users/')
-      setUsers(response.data)
+      const data = readList(await shareGet('/api/v1/users'))
+      setUsers(data.items)
+      setFields(data.custom_columns)
     } catch (error) {
       const detail = error.response?.data?.detail
       toast.error(typeof detail === 'string' ? detail : 'Failed to load users')
@@ -44,6 +57,7 @@ export function AccessControl() {
   const openCreate = () => {
     setEditing('new')
     setForm(emptyForm)
+    setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, ''])))
   }
 
   const openEdit = (user) => {
@@ -55,6 +69,7 @@ export function AccessControl() {
       is_active: user.is_active,
       password: '',
     })
+    setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, user.custom_fields?.[field.field_key] || ''])))
   }
 
   const save = async (event) => {
@@ -64,6 +79,7 @@ export function AccessControl() {
       email: form.email,
       role: form.role,
       is_active: form.is_active,
+      custom_fields: customValues,
     }
     if (form.password) payload.password = form.password
     try {
@@ -103,41 +119,42 @@ export function AccessControl() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-bold">Access Control</h1>
-        <div className="flex items-center gap-2">
-          <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search users" />
+    <div className={`flex flex-col gap-3 ${embedded ? 'h-full min-h-0' : 'h-[calc(100vh-2rem)]'}`}>
+      <div className="flex items-center gap-3">
+        {!embedded && <h1 className="font-heading text-2xl font-bold">Access Control</h1>}
+        <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search users" />
+        <div className="ml-auto flex items-center gap-2">
+          <TableToolsMenu entityType="user" isAdmin fields={fields} onFields={load} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Access Control" />
           <Button type="button" className="h-8" onClick={openCreate}><Plus className="mr-2 h-4 w-4" />New User</Button>
         </div>
       </div>
       <Card className="flex min-h-0 flex-1 flex-col rounded-none border-0 shadow-none">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Sl No</TableHead>
-                  <SortHead label="Name" column="name" sort={tools.sort} onSort={tools.toggleSort} />
-                  <SortHead label="Email" column="email" sort={tools.sort} onSort={tools.toggleSort} />
-                  <SortHead label="Role" column="role" sort={tools.sort} onSort={tools.toggleSort} />
-                  <SortHead label="Status" column="is_active" sort={tools.sort} onSort={tools.toggleSort} />
-                  <TableHead />
+                  {shown.visible.map((column) => (
+                    <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
+                  ))}
+                  <TableHead className="w-20 text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={6}>Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={shown.visible.length + 2}>Loading...</TableCell></TableRow>
                 ) : page.rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={6}>No users</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={shown.visible.length + 2}>No users</TableCell></TableRow>
                 ) : page.rows.map((user, index) => (
                   <TableRow key={user.id}>
                     <TableCell>{(page.page - 1) * page.pageSize + index + 1}</TableCell>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell className="uppercase">{user.role}</TableCell>
-                    <TableCell>{user.is_active ? 'Active' : 'Inactive'}</TableCell>
-                    <TableCell>
+                    {shown.visible.map((column) => (
+                      <TableCell key={column.key} className={column.key === 'role' ? 'uppercase' : column.key === 'name' ? 'font-medium' : ''}>
+                        {(column.custom ? user.custom_fields?.[column.key] : user[column.key]) || '-'}
+                      </TableCell>
+                    ))}
+                    <TableCell className="text-right">
                       <RowActions onEdit={() => openEdit(user)} onDelete={user.id !== currentUser?.id ? () => remove(user) : undefined} />
                     </TableCell>
                   </TableRow>
@@ -163,14 +180,14 @@ export function AccessControl() {
             </div>
             <div className="space-y-1">
               <Label>Role</Label>
-              <select className="flex h-9 w-full border border-input bg-background px-3 text-sm" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+              <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
                 <option value="admin">Admin</option>
                 <option value="user">User</option>
               </select>
             </div>
             <div className="space-y-1">
               <Label>Status</Label>
-              <select className="flex h-9 w-full border border-input bg-background px-3 text-sm" value={form.is_active ? 'active' : 'inactive'} onChange={(event) => setForm({ ...form, is_active: event.target.value === 'active' })}>
+              <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.is_active ? 'active' : 'inactive'} onChange={(event) => setForm({ ...form, is_active: event.target.value === 'active' })}>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
@@ -179,6 +196,7 @@ export function AccessControl() {
               <Label>{editing === 'new' ? 'Password' : 'New password'}</Label>
               <Input type="password" maxLength={6} minLength={editing === 'new' ? 6 : (form.password ? 6 : undefined)} required={editing === 'new'} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing === 'new' ? 'Exactly 6 characters' : 'Leave blank to keep current'} />
             </div>
+            <CustomFieldInputs fields={fields} values={customValues} onChange={setCustomValues} />
             <DialogFooter><Button type="submit">Save</Button></DialogFooter>
           </form>
         </DialogContent>

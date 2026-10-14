@@ -10,28 +10,28 @@ export function Dashboard() {
       description: 'Manage your product catalog',
       icon: Package,
       href: '/products',
-      color: 'bg-brand-500',
+      color: 'bg-primary',
     },
     {
       title: 'BOM',
       description: 'View and manage Bill of Materials',
       icon: TreeDeciduous,
       href: '/bom',
-      color: 'bg-brand-600',
+      color: 'bg-primary',
     },
     {
       title: 'Process Plan',
       description: 'Configure manufacturing operations',
       icon: Settings,
       href: '/process-plan',
-      color: 'bg-brand-700',
+      color: 'bg-primary',
     },
     {
       title: 'Cost Estimation',
       description: 'Calculate product costs',
       icon: Calculator,
       href: '/cost-estimation',
-      color: 'bg-brand-800',
+      color: 'bg-primary',
     },
   ]
 
@@ -73,7 +73,7 @@ export function Dashboard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white font-bold text-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold text-sm">
               1
             </div>
             <div>
@@ -82,7 +82,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-start gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white font-bold text-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold text-sm">
               2
             </div>
             <div>
@@ -91,7 +91,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-start gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white font-bold text-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold text-sm">
               3
             </div>
             <div>
@@ -100,7 +100,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-start gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white font-bold text-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold text-sm">
               4
             </div>
             <div>

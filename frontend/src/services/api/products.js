@@ -1,13 +1,10 @@
-import apiClient from './client'
+import apiClient, { shareGet } from './client'
 
 const pendingHierarchy = new Map()
 const pendingCost = new Map()
 
 export const productsService = {
-  getAll: async (params = {}) => {
-    const response = await apiClient.get('/api/v1/products', { params })
-    return response.data
-  },
+  getAll: (params = {}) => shareGet('/api/v1/products', { params }),
 
   getById: async (id) => {
     const response = await apiClient.get(`/api/v1/products/${id}`)
@@ -56,6 +53,26 @@ export const productsService = {
 
   delete: async (id) => {
     const response = await apiClient.delete(`/api/v1/products/${id}`)
+    return response.data
+  },
+
+  getFields: async () => {
+    const response = await apiClient.get('/api/v1/product-fields')
+    return response.data
+  },
+
+  createField: async (payload) => {
+    const response = await apiClient.post('/api/v1/product-fields', payload)
+    return response.data
+  },
+
+  updateField: async (id, payload) => {
+    const response = await apiClient.put(`/api/v1/product-fields/${id}`, payload)
+    return response.data
+  },
+
+  deleteField: async (id) => {
+    const response = await apiClient.delete(`/api/v1/product-fields/${id}`)
     return response.data
   },
 }

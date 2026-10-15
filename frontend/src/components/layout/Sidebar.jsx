@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LogOut, Moon, Package, Settings, Sun } from 'lucide-react'
+import { FileText, LogOut, Moon, Package, Settings, Sun } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useAuth } from '../../hooks/use-auth'
 import { useTheme } from '../../hooks/use-theme'
@@ -13,6 +13,7 @@ export function Sidebar() {
   const { theme, toggleTheme } = useTheme()
   const productsActive = location.pathname === '/products' || location.pathname.startsWith('/products/')
   const configActive = location.pathname.startsWith('/configuration')
+  const reportsActive = location.pathname.startsWith('/reports')
 
   return (
     <div className="flex h-full w-64 flex-col border-r border-border bg-background">
@@ -30,6 +31,16 @@ export function Sidebar() {
         >
           <Package className="h-4 w-4" />
           Products
+        </Link>
+        <Link
+          to="/reports"
+          className={cn(
+            'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-base',
+            reportsActive ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-accent'
+          )}
+        >
+          <FileText className="h-4 w-4" />
+          Report
         </Link>
         <Link
           to="/configuration?tab=work-centers"

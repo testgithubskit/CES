@@ -12,6 +12,7 @@ import { SignIn } from './pages/SignIn'
 import { Products } from './pages/Products'
 import { Configuration } from './pages/Configuration'
 import { ProductBom } from './pages/ProductBom'
+import { Reports } from './pages/Reports'
 import { Machines } from './pages/Machines'
 import { NotFound } from './pages/NotFound'
 
@@ -52,6 +53,7 @@ function App() {
             >
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductBom />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="/configuration" element={<Configuration />} />
               <Route path="/configuration/work-centers" element={<Navigate to="/configuration?tab=work-centers" replace />} />
               <Route path="/configuration/work-centers/:workCenterId" element={<Machines />} />

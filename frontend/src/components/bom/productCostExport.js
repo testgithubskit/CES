@@ -1,6 +1,8 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import ExcelJS from 'exceljs'
+import { getStarredTemplate } from '../../services/reportTemplates'
+import { downloadTemplatedCostPdf } from '../reports/renderCostReport'
 
 const headers = [
   'Machine',
@@ -88,6 +90,11 @@ function customerLines(customer) {
 }
 
 export function downloadCostPdf(summary, customer) {
+  const template = getStarredTemplate()
+  if (template) {
+    downloadTemplatedCostPdf(summary, customer, template)
+    return
+  }
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const width = doc.internal.pageSize.getWidth()
   const drawHeader = () => {

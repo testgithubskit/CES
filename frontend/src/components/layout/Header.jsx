@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Factory, LogOut, Package, Search } from 'lucide-react'
+import { Factory, FileText, LogOut, Package, Search } from 'lucide-react'
 import { useAuth } from '../../hooks/use-auth'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { Avatar, AvatarFallback } from '../ui/avatar'
@@ -19,6 +19,7 @@ import { productsService } from '../../services/api/products'
 
 const pages = [
   { label: 'Products', href: '/products', icon: <Package /> },
+  { label: 'Report', href: '/reports', icon: <FileText /> },
   { label: 'Configuration', href: '/configuration?tab=work-centers', icon: <Factory /> },
 ]
 

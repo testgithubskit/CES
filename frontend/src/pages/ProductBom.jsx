@@ -127,7 +127,7 @@ export function ProductBom() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [hierarchy, setHierarchy] = useState(null)
-  const [showProduct, setShowProduct] = useState(false)
+  const [showProduct, setShowProduct] = useState(true)
   const [partTypes, setPartTypes] = useState([])
   const [workCenters, setWorkCenters] = useState([])
   const [machines, setMachines] = useState([])
@@ -638,18 +638,22 @@ export function ProductBom() {
         <div className={`mx-2 mt-2 flex items-center gap-1 rounded-lg py-1 pr-1 text-sm transition-colors hover:bg-accent ${showProduct ? 'bg-accent' : ''}`}>
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-start gap-1 text-left"
+            className="mt-1 shrink-0"
+            aria-label={expanded.product === false ? 'Expand product' : 'Collapse product'}
+            onClick={() => setExpanded((current) => ({ ...current, product: current.product === false }))}
+          >
+            {expanded.product === false ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
             onClick={() => {
-              setExpanded((current) => ({ ...current, product: current.product === false }))
               setSelectedPart(null)
               setShowProduct(true)
             }}
           >
-            {expanded.product === false ? <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0" />}
-            <span className="min-w-0">
-              <span className="block truncate font-semibold">{hierarchy.product_name}</span>
-              <span className="block truncate text-xs text-muted-foreground">{hierarchy.product_number}</span>
-            </span>
+            <span className="block truncate font-semibold">{hierarchy.product_name}</span>
+            <span className="block truncate text-xs text-muted-foreground">{hierarchy.product_number}</span>
           </button>
           <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">Product</span>
           <NodeMenu>

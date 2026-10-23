@@ -9,9 +9,9 @@ import { Card, CardContent } from '../components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import { Label } from '../components/ui/label'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { RowActions } from '../components/common/RowActions'
-import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
+import { ClearFilter, SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { toast } from 'sonner'
 import { productsService } from '../services/api/products'
 import { TablePager, useMeasuredPage } from '../components/common/TablePager'
@@ -29,7 +29,7 @@ const productSchema = z.object({
   description: z.string().trim().max(LIMITS.description),
 })
 
-const emptyForm = { product_number: '', product_name: '', quantity: '', description: '' }
+const emptyForm = { product_number: '', product_name: '', quantity: '1', description: '' }
 
 const builtinColumns = [
   { key: 'product_number', label: 'Product No' },
@@ -49,7 +49,16 @@ function errorMessage(error, fallback) {
 
 function formatDate(value) {
   if (!value) return '-'
-  return new Date(value).toLocaleString()
+  return new Date(value).toLocaleDateString('en-IN')
+}
+
+function localDay(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 export function Products() {
@@ -63,22 +72,30 @@ export function Products() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [customValues, setCustomValues] = useState({})
   const [limitNote, setLimitNote] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [createRows, setCreateRows] = useState([])
   const scrollerRef = useRef(null)
   const columns = useMemo(
     () => [...builtinColumns, ...fields.map((field) => ({ key: field.field_key, label: field.label, custom: true }))],
     [fields],
   )
   const shown = useShownColumns('ces-columns-product', columns)
-  const tableRows = useMemo(() => products.map((product) => ({
+  const datedProducts = useMemo(() => products.filter((product) => {
+    const day = localDay(product.created_at)
+    if (fromDate && day < fromDate) return false
+    if (toDate && day > toDate) return false
+    return true
+  }), [products, fromDate, toDate])
+  const tableRows = useMemo(() => datedProducts.map((product) => ({
     ...product,
     ...(product.custom_fields || {}),
     quantity: Number(product.quantity),
-    created_at: formatDate(product.created_at),
-  })), [products])
+  })), [datedProducts])
   const tools = useTableTools(tableRows, columns.map((column) => column.key))
   const page = useMeasuredPage(tools.rows, scrollerRef)
   const form = useForm({ resolver: zodResolver(productSchema), defaultValues: emptyForm })
-  const visibleCount = shown.visible.length + 2
+  const visibleCount = shown.visible.length + (isAdmin ? 2 : 1)
 
   const loadProducts = async () => {
     setLoading(true)
@@ -97,10 +114,18 @@ export function Products() {
     loadProducts()
   }, [])
 
+  const emptyCreateRow = () => ({
+    product_number: '',
+    product_name: '',
+    description: '',
+    custom_fields: Object.fromEntries(fields.map((field) => [field.field_key, ''])),
+  })
+
   const openCreateDialog = () => {
     setEditingProduct(null)
     setLimitNote('')
     form.reset(emptyForm)
+    setCreateRows([emptyCreateRow()])
     setCustomValues(Object.fromEntries(fields.map((field) => [field.field_key, ''])))
     setDialogOpen(true)
   }
@@ -119,28 +144,52 @@ export function Products() {
   }
 
   const handleSubmit = form.handleSubmit(async (values) => {
-    const payload = {
-      product_number: values.product_number,
-      product_name: values.product_name,
-      quantity: Number(values.quantity),
-      description: values.description || null,
-      version: editingProduct?.version || '1',
-      custom_fields: customValues,
-    }
     try {
-      if (editingProduct) {
-        await productsService.update(editingProduct.id, payload)
-        toast.success('Product updated')
-      } else {
-        await productsService.create(payload)
-        toast.success('Product created')
-      }
+      await productsService.update(editingProduct.id, {
+        product_number: values.product_number,
+        product_name: values.product_name,
+        quantity: Number(values.quantity),
+        description: values.description || null,
+        version: editingProduct.version || '1',
+        custom_fields: customValues,
+      })
+      toast.success('Product updated')
       setDialogOpen(false)
       loadProducts()
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to save product'))
     }
   })
+
+  const handleCreate = async (event) => {
+    event.preventDefault()
+    const rows = createRows.filter((row) => row.product_number.trim() && row.product_name.trim())
+    if (!rows.length) {
+      toast.error('Add at least one product with number and name')
+      return
+    }
+    try {
+      for (const row of rows) {
+        await productsService.create({
+          product_number: row.product_number.trim().slice(0, LIMITS.product_number),
+          product_name: row.product_name.trim().slice(0, LIMITS.product_name),
+          quantity: 1,
+          description: row.description.trim().slice(0, LIMITS.description) || null,
+          version: '1',
+          custom_fields: row.custom_fields,
+        })
+      }
+      toast.success(`${rows.length} product${rows.length === 1 ? '' : 's'} created`)
+      setDialogOpen(false)
+      loadProducts()
+    } catch (error) {
+      toast.error(errorMessage(error, 'Failed to save product'))
+    }
+  }
+
+  const updateCreateRow = (index, patch) => {
+    setCreateRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
+  }
 
   const handleDelete = async (product) => {
     if (!(await confirm({ title: 'Delete product', description: `Delete ${product.product_name}? This cannot be undone.` }))) return
@@ -168,6 +217,7 @@ export function Products() {
         </Link>
       )
     }
+    if (column.key === 'created_at') return formatDate(product.created_at)
     if (column.key === 'description') return product.description || '-'
     if (column.custom) return product.custom_fields?.[column.key] || '-'
     return product[column.key] || '-'
@@ -175,10 +225,19 @@ export function Products() {
 
   return (
     <div className="flex h-[calc(100vh-2rem)] flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-2xl font-bold">Products</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search products" />
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            From
+            <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-8 border border-input bg-background px-2 text-xs text-foreground" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            To
+            <input type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className="h-8 border border-input bg-background px-2 text-xs text-foreground" />
+          </label>
+          <ClearFilter show={Boolean(fromDate || toDate)} onClear={() => { setFromDate(''); setToDate('') }} />
           <TableToolsMenu
             entityType="product"
             isAdmin={isAdmin}
@@ -190,10 +249,12 @@ export function Products() {
             rows={tools.rows}
             title="Products"
           />
-          <Button className="h-8" onClick={openCreateDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Product
-          </Button>
+          {isAdmin && (
+            <Button className="h-8" onClick={openCreateDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Product
+            </Button>
+          )}
         </div>
       </div>
 
@@ -207,7 +268,7 @@ export function Products() {
                   {shown.visible.map((column) => (
                     <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
                   ))}
-                  <TableHead className="w-20 text-right">Action</TableHead>
+                  {isAdmin && <TableHead className="w-20 text-right">Action</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,9 +282,11 @@ export function Products() {
                     {shown.visible.map((column) => (
                       <TableCell key={column.key}>{cellValue(product, column)}</TableCell>
                     ))}
-                    <TableCell className="w-20 text-right">
-                      <RowActions onEdit={() => openEditDialog(product)} onDelete={() => handleDelete(product)} />
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="w-20 text-right">
+                        <RowActions onEdit={() => openEditDialog(product)} onDelete={() => handleDelete(product)} />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -234,10 +297,11 @@ export function Products() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className={editingProduct ? 'max-w-2xl' : 'max-w-4xl'}>
           <DialogHeader>
             <DialogTitle className="font-heading text-xl">{editingProduct ? 'Edit Product' : 'New Product'}</DialogTitle>
           </DialogHeader>
+          {editingProduct ? (
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4" autoComplete="off">
             <div className="space-y-1.5">
               <Label htmlFor="product_number">Product No</Label>
@@ -274,9 +338,66 @@ export function Products() {
             {limitNote && <p className="col-span-2 text-xs text-muted-foreground">{limitNote}</p>}
             <DialogFooter className="col-span-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit">{editingProduct ? 'Update' : 'Create'}</Button>
+              <Button type="submit">Update</Button>
             </DialogFooter>
           </form>
+          ) : (
+          <form onSubmit={handleCreate} className="space-y-3" autoComplete="off">
+            <div className="max-h-[55vh] space-y-3 overflow-auto pr-1">
+              {createRows.map((row, index) => (
+                <div key={index} className="grid grid-cols-2 gap-3 rounded-lg border border-border p-3">
+                  <div className="space-y-1.5">
+                    <Label>Product No</Label>
+                    <Input
+                      autoComplete="off"
+                      value={row.product_number}
+                      onChange={(event) => updateCreateRow(index, { product_number: keepWithin(event.target.value, LIMITS.product_number, 'Product number', setLimitNote) })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Product Name</Label>
+                    <Input
+                      autoComplete="off"
+                      value={row.product_name}
+                      onChange={(event) => updateCreateRow(index, { product_name: keepWithin(event.target.value, LIMITS.product_name, 'Product name', setLimitNote) })}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1.5">
+                    <Label>Description</Label>
+                    <textarea
+                      rows={2}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={row.description}
+                      onChange={(event) => updateCreateRow(index, { description: keepWithin(event.target.value, LIMITS.description, 'Description', setLimitNote) })}
+                    />
+                  </div>
+                  <CustomFieldInputs
+                    fields={fields}
+                    values={row.custom_fields}
+                    onChange={(custom_fields) => updateCreateRow(index, { custom_fields })}
+                  />
+                  {createRows.length > 1 && (
+                    <div className="col-span-2 flex justify-end">
+                      <Button type="button" variant="outline" className="h-8" onClick={() => setCreateRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />Remove
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {limitNote && <p className="text-xs text-muted-foreground">{limitNote}</p>}
+            <DialogFooter className="sm:justify-between">
+              <Button type="button" variant="outline" onClick={() => setCreateRows((current) => [...current, emptyCreateRow()])}>
+                <Plus className="mr-1 h-3.5 w-3.5" />Add
+              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button type="submit">Create</Button>
+              </div>
+            </DialogFooter>
+          </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

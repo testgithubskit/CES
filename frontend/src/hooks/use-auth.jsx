@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { authService } from '../services/api/auth'
+import { migrateLocalTemplates } from '../services/api/reportTemplates'
 import { toast } from 'sonner'
 
 const AuthContext = createContext()
@@ -23,6 +24,7 @@ export function AuthProvider({ children }) {
       const userData = await authService.getCurrentUser()
       setUser(userData)
       setIsAuthenticated(true)
+      migrateLocalTemplates().catch(() => {})
     } catch (error) {
       localStorage.removeItem('token')
       setUser(null)
@@ -37,6 +39,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', response.access_token)
     setUser(response.user)
     setIsAuthenticated(true)
+    migrateLocalTemplates().catch(() => {})
     return response
   }
 

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
-import { Input } from '../components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
+import { SearchSelect } from '../components/common/SearchSelect'
+import { useAuth } from '../hooks/use-auth'
 import apiClient, { shareGet } from '../services/api/client'
 import { downloadExcel, downloadPdf } from '../components/common/tableExport'
 function money(value) {
@@ -13,8 +14,11 @@ function money(value) {
 }
 
 export function MHRConfiguration({ embedded = false }) {
+  const { user } = useAuth()
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [matrix, setMatrix] = useState({ particulars: [], machines: [], values: [] })
   const [filter, setFilter] = useState('')
+  const [machineIds, setMachineIds] = useState([])
   const [drafts, setDrafts] = useState({})
   const [recommended, setRecommended] = useState({})
 
@@ -42,6 +46,7 @@ export function MHRConfiguration({ embedded = false }) {
   }, [matrix.values])
 
   const machines = matrix.machines.filter((machine) => {
+    if (machineIds.length) return machineIds.some((id) => String(id) === String(machine.id))
     const query = filter.trim().toLowerCase()
     if (!query) return true
     return `${machine.label} ${machine.make} ${machine.model} ${machine.type}`.toLowerCase().includes(query)
@@ -121,7 +126,18 @@ export function MHRConfiguration({ embedded = false }) {
     <div className={`flex flex-col gap-3 ${embedded ? 'h-full min-h-0' : 'h-[calc(100vh-2rem)]'}`}>
       <div className="flex items-center gap-3">
         {!embedded && <h1 className="font-heading text-2xl font-bold">Machine Hour Rates</h1>}
-        <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter machines" className="h-8 w-48" />
+        <SearchSelect
+          options={matrix.machines.map((machine) => ({
+            value: machine.id,
+            label: [machine.label, machine.make, machine.model].filter(Boolean).join(' · '),
+          }))}
+          value={machineIds}
+          onChange={setMachineIds}
+          query={filter}
+          onQueryChange={setFilter}
+          placeholder="Filter machines"
+          allLabel="All machines"
+        />
         <div className="ml-auto flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{machines.length} machines</span>
           <DropdownMenu>
@@ -164,7 +180,7 @@ export function MHRConfiguration({ embedded = false }) {
                   const value = cellValue(machine, particular)
                   return (
                     <td key={machine.id} className="border border-border px-1 py-1 text-right">
-                      {particular.is_input ? (
+                      {particular.is_input && isAdmin ? (
                         <input
                           className="h-6 w-full border border-input bg-background px-1 text-right text-xs"
                           value={value}
@@ -172,7 +188,7 @@ export function MHRConfiguration({ embedded = false }) {
                           onBlur={(event) => saveInput(machine, particular, event.target.value)}
                         />
                       ) : (
-                        <span>{money(value)}</span>
+                        <span>{money(value) || value}</span>
                       )}
                     </td>
                   )
@@ -194,13 +210,17 @@ export function MHRConfiguration({ embedded = false }) {
               <td className="sticky left-[13.5rem] z-20 box-border h-7 w-16 min-w-16 max-w-16 border border-border bg-accent px-1.5 font-bold">REC</td>
               <td className="sticky left-[17.5rem] z-20 box-border h-7 w-32 min-w-32 max-w-32 border border-border bg-accent" />
               {machines.map((machine) => (
-                <td key={machine.id} className="border border-border bg-accent px-1 py-1">
-                  <input
-                    className="h-6 w-full border border-input bg-background px-1 text-right text-xs font-bold"
-                    value={recommended[machine.id] ?? ''}
-                    onChange={(event) => setRecommended((current) => ({ ...current, [machine.id]: event.target.value }))}
-                    onBlur={() => saveRecommended(machine)}
-                  />
+                <td key={machine.id} className="border border-border bg-accent px-1 py-1 text-right font-bold">
+                  {isAdmin ? (
+                    <input
+                      className="h-6 w-full border border-input bg-background px-1 text-right text-xs font-bold"
+                      value={recommended[machine.id] ?? ''}
+                      onChange={(event) => setRecommended((current) => ({ ...current, [machine.id]: event.target.value }))}
+                      onBlur={() => saveRecommended(machine)}
+                    />
+                  ) : (
+                    money(recommended[machine.id])
+                  )}
                 </td>
               ))}
             </tr>

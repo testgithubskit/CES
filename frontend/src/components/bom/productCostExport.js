@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import ExcelJS from 'exceljs'
-import { getStarredTemplate } from '../../services/reportTemplates'
+import { getStarredTemplate } from '../../services/api/reportTemplates'
 import { downloadTemplatedCostPdf } from '../reports/renderCostReport'
 
 const headers = [
@@ -20,6 +20,30 @@ const headers = [
   'Cost/Qty',
   'Overall Qty Cost',
 ]
+
+export function scaleCostSummary(summary, qty) {
+  const exportQty = Math.max(1, Number(qty) || 1)
+  const base = Math.max(1, Number(summary.quantity) || 1)
+  const factor = exportQty / base
+  const money = (value) => Number(value || 0) * factor
+  return {
+    ...summary,
+    quantity: exportQty,
+    total_machining_cost: money(summary.total_machining_cost),
+    additional_total: money(summary.additional_total),
+    grand_total: money(summary.grand_total),
+    additional_costs: (summary.additional_costs || []).map((cost) => ({
+      ...cost,
+      cost_value: money(cost.cost_value),
+    })),
+    operations: (summary.operations || []).map((row) => ({
+      ...row,
+      quantity: Math.round(Number(row.quantity || 1) * factor),
+      cost_for_overall_qty: money(row.cost_for_overall_qty),
+      part_total_cost: money(row.part_total_cost),
+    })),
+  }
+}
 
 function rupees(value) {
   return `Rs. ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -86,11 +110,12 @@ function customerLines(customer) {
     ['Email', customer.email || ''],
     ['Phone', customer.contact_number || ''],
     ['Address', customer.address || ''],
+    ...Object.entries(customer.custom_fields || {}).map(([key, value]) => [key.replace(/_/g, ' '), value]),
   ]
 }
 
-export function downloadCostPdf(summary, customer) {
-  const template = getStarredTemplate()
+export async function downloadCostPdf(summary, customer) {
+  const template = await getStarredTemplate().catch(() => null)
   if (template) {
     downloadTemplatedCostPdf(summary, customer, template)
     return

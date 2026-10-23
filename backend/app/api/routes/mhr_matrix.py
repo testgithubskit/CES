@@ -8,6 +8,7 @@ from app.database.session import get_db
 from app.models.user import User
 from app.models.machine import Machine
 from app.core.dependencies import get_current_user
+from app.core.rbac import require_admin
 from app.services.mhr_service import recalculate_machine_mhr
 
 router = APIRouter(prefix="/api/v1/mhr", tags=["MHR Matrix"])
@@ -102,7 +103,7 @@ def update_machine_inputs(
     machine_id: int,
     payload: List[InputUpdate],
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:
@@ -129,7 +130,7 @@ def update_recommended(
     machine_id: int,
     recommended_mhr: float,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     machine = db.query(Machine).filter(Machine.id == machine_id).first()
     if not machine:

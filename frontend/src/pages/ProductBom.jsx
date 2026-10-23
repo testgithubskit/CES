@@ -126,6 +126,35 @@ function removePart(tree, partId) {
   }
 }
 
+function matchesQuery(value, query) {
+  return String(value || '').toLowerCase().includes(query)
+}
+
+function partMatches(part, query) {
+  return matchesQuery(part.part_name, query) || matchesQuery(part.part_number, query)
+}
+
+function assemblyMatches(assembly, query) {
+  return matchesQuery(assembly.assembly_name, query) || matchesQuery(assembly.assembly_number, query)
+}
+
+function filterAssembly(assembly, query) {
+  if (assemblyMatches(assembly, query)) return assembly
+  const parts = (assembly.parts || []).filter((part) => partMatches(part, query))
+  const subAssemblies = (assembly.sub_assemblies || []).map((child) => filterAssembly(child, query)).filter(Boolean)
+  if (!parts.length && !subAssemblies.length) return null
+  return { ...assembly, parts, sub_assemblies: subAssemblies }
+}
+
+function filterBomTree(tree, query) {
+  if (!tree || !query) return tree
+  return {
+    ...tree,
+    assemblies: (tree.assemblies || []).map((assembly) => filterAssembly(assembly, query)).filter(Boolean),
+    direct_parts: (tree.direct_parts || []).filter((part) => partMatches(part, query)),
+  }
+}
+
 export function ProductBom() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -155,6 +184,7 @@ export function ProductBom() {
   const [bulkOps, setBulkOps] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [bomQuery, setBomQuery] = useState('')
   const fileCache = useRef(new Map())
   const fileJobs = useRef(new Map())
   const operationTools = useTableTools(operations, ['operation_number', 'operation_name', 'operation_type', 'work_center_name', 'machine_name'])
@@ -594,6 +624,8 @@ export function ProductBom() {
   }
 
   const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }))
+  const search = bomQuery.trim().toLowerCase()
+  const visibleTree = useMemo(() => filterBomTree(hierarchy, search), [hierarchy, search])
 
   const renderPart = (part, depth) => (
     <div key={`part-${part.id}`} className={`group ml-1 flex items-center gap-1 rounded-lg py-1 pr-1 transition-colors hover:bg-accent ${selectedPart?.id === part.id ? 'bg-accent' : ''}`}>
@@ -613,7 +645,7 @@ export function ProductBom() {
 
   const renderAssembly = (assembly, depth) => {
     const key = `assembly-${assembly.id}`
-    const isOpen = expanded[key] === true
+    const isOpen = search ? true : expanded[key] === true
     return (
       <div key={key}>
         <div className="group ml-1 flex items-center gap-1 rounded-lg py-1 pr-1 text-sm transition-colors hover:bg-accent">
@@ -670,6 +702,9 @@ export function ProductBom() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <div className="border-b border-border px-2 py-2">
+          <TableSearch value={bomQuery} onChange={setBomQuery} placeholder="Search parts" className="w-full" />
+        </div>
         <div className={`mx-2 mt-2 flex items-center gap-1 rounded-lg py-1 pr-1 text-sm transition-colors hover:bg-accent ${showProduct ? 'bg-accent' : ''}`}>
           <button
             type="button"
@@ -677,7 +712,7 @@ export function ProductBom() {
             aria-label={expanded.product === false ? 'Expand product' : 'Collapse product'}
             onClick={() => setExpanded((current) => ({ ...current, product: current.product === false }))}
           >
-            {expanded.product === false ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {!search && expanded.product === false ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
           <button
             type="button"
@@ -699,12 +734,14 @@ export function ProductBom() {
           </NodeMenu>
         </div>
         <div className="flex-1 overflow-auto py-1">
-          {expanded.product !== false && (
+          {(search || expanded.product !== false) && (
             <div className="ml-5 border-l border-border pb-2">
-              {hierarchy.assemblies?.map((assembly) => renderAssembly(assembly, 0))}
-              {hierarchy.direct_parts?.map((part) => renderPart(part, 0))}
-              {!hierarchy.assemblies?.length && !hierarchy.direct_parts?.length && (
-                <p className="px-2 py-4 text-sm text-muted-foreground">Add an assembly or a part under this product.</p>
+              {visibleTree.assemblies?.map((assembly) => renderAssembly(assembly, 0))}
+              {visibleTree.direct_parts?.map((part) => renderPart(part, 0))}
+              {!visibleTree.assemblies?.length && !visibleTree.direct_parts?.length && (
+                <p className="px-2 py-4 text-sm text-muted-foreground">
+                  {search ? 'No matching parts' : 'Add an assembly or a part under this product.'}
+                </p>
               )}
             </div>
           )}
@@ -712,15 +749,17 @@ export function ProductBom() {
       </section>
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex h-16 shrink-0 items-center gap-4 border-b border-border px-3 text-sm">
-          {selectedPart && !showProduct && (
-            <>
-              <span className="truncate font-bold">{selectedPart.part_number}</span>
-              <span className="truncate">{selectedPart.part_name}</span>
-              <span className="shrink-0 text-muted-foreground">Qty {Number(selectedPart.quantity)}</span>
-            </>
-          )}
-        </div>
+        {!showProduct && (
+          <div className="flex h-16 shrink-0 items-center gap-4 border-b border-border px-3 text-sm">
+            {selectedPart && (
+              <>
+                <span className="truncate font-bold">{selectedPart.part_number}</span>
+                <span className="truncate">{selectedPart.part_name}</span>
+                <span className="shrink-0 text-muted-foreground">Qty {Number(selectedPart.quantity)}</span>
+              </>
+            )}
+          </div>
+        )}
         {showProduct ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ProductCost productId={id} />

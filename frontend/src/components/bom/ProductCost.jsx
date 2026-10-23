@@ -9,7 +9,7 @@ import { TableSearch, useTableTools } from '../common/TableTools'
 import { TablePager } from '../common/TablePager'
 import { productsService } from '../../services/api/products'
 import { customersService } from '../../services/api/customers'
-import { downloadCostExcel, downloadCostPdf } from './productCostExport'
+import { downloadCostExcel, downloadCostPdf, scaleCostSummary } from './productCostExport'
 import { useConfirm } from '../common/ConfirmDialog'
 
 function money(value) {
@@ -35,6 +35,7 @@ export function ProductCost({ productId }) {
   const [exportOpen, setExportOpen] = useState(false)
   const [customers, setCustomers] = useState([])
   const [customerId, setCustomerId] = useState('')
+  const [exportQty, setExportQty] = useState('1')
   const scrollerRef = useRef(null)
   const tools = useTableTools(summary?.operations || [], ['machine_name', 'part_name', 'part_number', 'operation_name', 'operation_number'])
   const costTools = useTableTools(summary?.additional_costs || [], ['cost_name', 'cost_value'])
@@ -60,6 +61,7 @@ export function ProductCost({ productId }) {
   }, [open, summary])
 
   const openExport = async () => {
+    setExportQty('1')
     setExportOpen(true)
     if (customers.length) return
     try {
@@ -70,15 +72,25 @@ export function ProductCost({ productId }) {
     }
   }
 
-  const exportReport = (kind) => {
+  const exportReport = async (kind) => {
     const customer = customers.find((item) => String(item.id) === String(customerId))
     if (!customer) {
       toast.error('Select a customer')
       return
     }
-    if (kind === 'pdf') downloadCostPdf(summary, customer)
-    else downloadCostExcel(summary, customer)
-    setExportOpen(false)
+    const qty = Number(exportQty)
+    if (!Number.isInteger(qty) || qty < 1) {
+      toast.error('Enter a quantity of 1 or more')
+      return
+    }
+    try {
+      const scaled = scaleCostSummary(summary, qty)
+      if (kind === 'pdf') await downloadCostPdf(scaled, customer)
+      else await downloadCostExcel(scaled, customer)
+      setExportOpen(false)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || error.message || 'Failed to download report')
+    }
   }
 
   const addCost = async (costName, costValue) => {
@@ -123,16 +135,15 @@ export function ProductCost({ productId }) {
   })
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate font-heading text-lg font-bold">{summary.product_name}</h2>
-        </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
+        <h2 className="min-w-0 truncate font-heading text-lg font-bold">{summary.product_name}</h2>
         <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center border border-border" aria-label="Export" title="Export" onClick={openExport}>
           <Download className="h-4 w-4" />
         </button>
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
       <div className="grid grid-cols-5 gap-2">
         {cards.map(([label, key, isMoney]) => (
           <div key={key} className="min-w-0 border border-border px-3 py-2">
@@ -279,14 +290,27 @@ export function ProductCost({ productId }) {
           <DialogHeader>
             <DialogTitle>Export summary</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-xs font-bold">Customer</label>
-            <select className="h-9 w-full border border-input bg-background px-2 text-sm" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-              <option value="">Select a customer</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>{customer.company_name}{customer.branch ? ` · ${customer.branch}` : ''}</option>
-              ))}
-            </select>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-xs font-bold">Customer</label>
+              <select className="h-9 w-full border border-input bg-background px-2 text-sm" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+                <option value="">Select a customer</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>{customer.company_name}{customer.branch ? ` · ${customer.branch}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold">Qty</label>
+              <Input
+                inputMode="numeric"
+                min="1"
+                value={exportQty}
+                onChange={(event) => setExportQty(event.target.value.replace(/\D/g, ''))}
+                className="h-9"
+              />
+              <p className="text-xs text-muted-foreground">1-qty cost is multiplied by this quantity in the report.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => exportReport('excel')}>Download Excel</Button>
@@ -294,6 +318,7 @@ export function ProductCost({ productId }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   )
 }

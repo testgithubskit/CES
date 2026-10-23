@@ -7,7 +7,7 @@ import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { Lock, Mail, ArrowRight } from 'lucide-react'
+import { Lock, Mail, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { Logo } from '../components/common/Logo'
 
 export function SignIn() {
@@ -16,6 +16,7 @@ export function SignIn() {
     password: '',
   })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -89,7 +90,7 @@ export function SignIn() {
                 <Input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   minLength={6}
                   maxLength={6}
@@ -98,6 +99,15 @@ export function SignIn() {
                   onChange={handleChange}
                   className="h-full border-0 px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </motion.div>
             <motion.div

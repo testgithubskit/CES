@@ -16,4 +16,5 @@ from app.models import (
     CostEstimation,
     EstimationAdditionalCost,
     EstimationOperationCost,
+    ReportTemplate,
 )

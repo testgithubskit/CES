@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileDown, Plus, Trash2, Upload } from 'lucide-react'
+import { Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import apiClient from '../../services/api/client'
 import { Button } from '../ui/button'
@@ -198,11 +198,6 @@ export function BulkOperationsDialog({ open, partId, partName, workCenters, mach
             )}
           </div>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" asChild>
-              <a href="/operations-template.docx" download="OperationsTemplate.docx">
-                <FileDown className="mr-1 h-3.5 w-3.5" />Template
-              </a>
-            </Button>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
             {rows.length > 0 && <Button type="button" disabled={busy} onClick={create}>Create {selectedCount} operations</Button>}
           </div>

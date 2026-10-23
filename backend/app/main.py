@@ -24,6 +24,7 @@ from app.api.routes.cost_estimation_download import router as cost_estimation_do
 from app.api.routes.product_cost import router as product_cost_router
 from app.api.routes.custom_fields import router as custom_fields_router
 from app.api.routes.report_pdf import router as report_pdf_router
+from app.api.routes.report_templates import router as report_templates_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -60,6 +61,7 @@ app.include_router(cost_estimation_download_router)
 app.include_router(product_cost_router)
 app.include_router(custom_fields_router)
 app.include_router(report_pdf_router)
+app.include_router(report_templates_router)
 
 
 @app.get("/")

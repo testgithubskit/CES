@@ -38,6 +38,7 @@ const collectionPaths = new Set([
   '/api/v1/documents',
   '/api/v1/users',
   '/api/v1/mhr-particulars',
+  '/api/v1/report-templates',
 ])
 
 apiClient.interceptors.request.use(

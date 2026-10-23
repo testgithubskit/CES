@@ -10,6 +10,7 @@ from app.models.part import Part
 from app.models.operation import Operation
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.core.dependencies import get_current_user
+from app.core.rbac import require_admin
 from app.models.user import User
 from app.schemas.listing import RecordList
 from app.services.custom_fields import apply_values, catalog, entries_for_entity, pop_custom, with_fields, with_fields_many
@@ -106,10 +107,10 @@ def _product_response(db: Session, product: Product) -> ProductResponse:
 def create_product(
     product_data: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """
-    Create a new product. Version defaults to 1.
+    Create a new product. Admin only. Version defaults to 1.
     """
     payload = product_data.model_dump()
     custom_fields = pop_custom(payload)
@@ -162,7 +163,7 @@ def update_product(
     product_id: int,
     product_update: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """
     Update a product. Admin only.
@@ -188,7 +189,7 @@ def update_product(
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """
     Delete a product. Admin only.

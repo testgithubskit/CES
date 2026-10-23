@@ -14,6 +14,11 @@ import { useAuth } from '../hooks/use-auth'
 import { useConfirm } from '../components/common/ConfirmDialog'
 import apiClient, { readList, shareGet } from '../services/api/client'
 import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
+import { PasswordInput } from '../components/common/PasswordInput'
+
+function sanitizeName(value) {
+  return value.replace(/^\s+/, '').replace(/\s{2,}/g, ' ')
+}
 
 const emptyForm = { name: '', email: '', role: 'user', is_active: true, password: '' }
 
@@ -76,8 +81,17 @@ export function AccessControl({ embedded = false }) {
 
   const save = async (event) => {
     event.preventDefault()
+    const name = form.name.trim()
+    if (!name) {
+      toast.error('Name is required')
+      return
+    }
+    if (form.password && /\s/.test(form.password)) {
+      toast.error('Password cannot contain spaces')
+      return
+    }
     const payload = {
-      name: form.name,
+      name,
       email: form.email,
       role: form.role,
       is_active: form.is_active,
@@ -174,7 +188,12 @@ export function AccessControl({ embedded = false }) {
           <form onSubmit={save} className="space-y-3">
             <div className="space-y-1">
               <Label>Name</Label>
-              <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+              <Input
+                value={form.name}
+                required
+                onChange={(event) => setForm({ ...form, name: sanitizeName(event.target.value) })}
+                onBlur={() => setForm((current) => ({ ...current, name: current.name.trim() }))}
+              />
             </div>
             <div className="space-y-1">
               <Label>Email</Label>
@@ -196,7 +215,16 @@ export function AccessControl({ embedded = false }) {
             </div>
             <div className="space-y-1">
               <Label>{editing === 'new' ? 'Password' : 'New password'}</Label>
-              <Input type="password" maxLength={6} minLength={editing === 'new' ? 6 : (form.password ? 6 : undefined)} required={editing === 'new'} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing === 'new' ? 'Exactly 6 characters' : 'Leave blank to keep current'} />
+              <PasswordInput
+                maxLength={6}
+                minLength={editing === 'new' ? 6 : (form.password ? 6 : undefined)}
+                required={editing === 'new'}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value.replace(/\s/g, '') })}
+                onKeyDown={(event) => { if (event.key === ' ') event.preventDefault() }}
+                placeholder={editing === 'new' ? 'Exactly 6 characters' : 'Leave blank to keep current'}
+              />
             </div>
             <CustomFieldInputs fields={fields} values={customValues} onChange={setCustomValues} />
             <DialogFooter><Button type="submit">Save</Button></DialogFooter>

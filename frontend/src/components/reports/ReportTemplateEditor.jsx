@@ -28,7 +28,10 @@ import { Switch } from '../ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../ui/dropdown-menu'
 import apiClient from '../../services/api/client'
-import { COST_PLACEHOLDERS, DEFAULT_PAGE_SETTINGS, PAGE_SIZES, getReportTemplate, saveReportTemplate } from '../../services/reportTemplates'
+import { COST_PLACEHOLDERS, DEFAULT_PAGE_SETTINGS, PAGE_SIZES, customerColumnPlaceholders } from '../../services/reportTemplates'
+import { getReportTemplate, saveReportTemplate, templateError } from '../../services/api/reportTemplates'
+import { customFieldsService } from '../../services/api/customFields'
+import { SelectionFormatToolbar } from './SelectionFormatToolbar'
 
 const PAGE_PX = {
   A4: [794, 1123],
@@ -233,11 +236,12 @@ function ToolButton({ label, active, danger, disabled, onClick, children }) {
   )
 }
 
-export function ReportTemplateEditor({ templateId, onBack }) {
+export function ReportTemplateEditor({ templateId, onBack, readOnly = false }) {
   const [name, setName] = useState('Untitled template')
   const [starred, setStarred] = useState(false)
   const [page, setPage] = useState(DEFAULT_PAGE_SETTINGS)
   const [custom, setCustom] = useState([])
+  const [customerPlaceholders, setCustomerPlaceholders] = useState([])
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState('')
   const [zoom, setZoom] = useState(0.85)
@@ -253,48 +257,69 @@ export function ReportTemplateEditor({ templateId, onBack }) {
   const snapshotRef = useRef('')
   const bump = () => setTick((value) => value + 1)
 
-  const headerEditor = useEditor({ extensions: extensions('Header — click placeholders to insert...'), content: '', onFocus: () => setActive('header'), onSelectionUpdate: bump, onTransaction: bump })
-  const bodyEditor = useEditor({ extensions: extensions('Body — click placeholders to insert...'), content: '', onFocus: () => setActive('body'), onSelectionUpdate: bump, onTransaction: bump })
-  const footerEditor = useEditor({ extensions: extensions('Footer — click placeholders to insert...'), content: '', onFocus: () => setActive('footer'), onSelectionUpdate: bump, onTransaction: bump })
+  const headerEditor = useEditor({ extensions: extensions('Header — click placeholders to insert...'), content: '', editable: !readOnly, onFocus: () => setActive('header'), onSelectionUpdate: bump, onTransaction: bump })
+  const bodyEditor = useEditor({ extensions: extensions('Body — click placeholders to insert...'), content: '', editable: !readOnly, onFocus: () => setActive('body'), onSelectionUpdate: bump, onTransaction: bump })
+  const footerEditor = useEditor({ extensions: extensions('Footer — click placeholders to insert...'), content: '', editable: !readOnly, onFocus: () => setActive('footer'), onSelectionUpdate: bump, onTransaction: bump })
   const editors = { header: headerEditor, body: bodyEditor, footer: footerEditor }
   const editor = editors[active]
   const inTable = Boolean(editor?.isActive('table'))
 
   useEffect(() => {
+    customFieldsService.list('customer')
+      .then((rows) => setCustomerPlaceholders(customerColumnPlaceholders(rows)))
+      .catch(() => setCustomerPlaceholders([]))
+  }, [])
+
+  useEffect(() => {
     if (!headerEditor || !bodyEditor || !footerEditor || loaded.current) return
-    loaded.current = true
-    const existing = templateId ? getReportTemplate(templateId) : null
-    const data = existing?.template_data || {}
-    setName(existing?.name || 'Untitled template')
-    setStarred(Boolean(existing?.is_default))
-    setPage({
-      ...DEFAULT_PAGE_SETTINGS,
-      ...data,
-      margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) },
+    let cancelled = false
+    const apply = (existing) => {
+      if (cancelled) return
+      loaded.current = true
+      const data = existing?.template_data || {}
+      setName(existing?.name || 'Untitled template')
+      setStarred(Boolean(existing?.is_default))
+      setPage({
+        ...DEFAULT_PAGE_SETTINGS,
+        ...data,
+        margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) },
+      })
+      setCustom(Array.isArray(data.customPlaceholders) ? data.customPlaceholders : [])
+      headerEditor.commands.setContent(data.headerHtml || '<p></p>')
+      bodyEditor.commands.setContent(data.bodyHtml || (existing ? '<p></p>' : '<p>{{product_name}} · {{product_number}}</p><p>Qty {{quantity}} · {{date}}</p><p>{{operations_table}}</p><p><strong>Grand total {{grand_total}}</strong></p>'))
+      footerEditor.commands.setContent(data.footerHtml || '<p>{{product_number}}</p>')
+      const nextPage = { ...DEFAULT_PAGE_SETTINGS, ...data, margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) } }
+      const nextCustom = Array.isArray(data.customPlaceholders) ? data.customPlaceholders : []
+      snapshotRef.current = JSON.stringify({
+        name: existing?.name || 'Untitled template',
+        starred: Boolean(existing?.is_default),
+        page: nextPage,
+        custom: nextCustom,
+        header: headerEditor.getHTML(),
+        body: bodyEditor.getHTML(),
+        footer: footerEditor.getHTML(),
+      })
+    }
+    if (!templateId) {
+      apply(null)
+      return () => { cancelled = true }
+    }
+    getReportTemplate(templateId).then(apply).catch((error) => {
+      toast.error(templateError(error, 'Failed to load template'))
+      apply(null)
     })
-    setCustom(Array.isArray(data.customPlaceholders) ? data.customPlaceholders : [])
-    headerEditor.commands.setContent(data.headerHtml || '<p></p>')
-    bodyEditor.commands.setContent(data.bodyHtml || (existing ? '<p></p>' : '<p>{{product_name}} · {{product_number}}</p><p>Qty {{quantity}} · {{date}}</p><p>{{operations_table}}</p><p><strong>Grand total {{grand_total}}</strong></p>'))
-    footerEditor.commands.setContent(data.footerHtml || '<p>{{product_number}}</p>')
-    const nextPage = { ...DEFAULT_PAGE_SETTINGS, ...data, margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) } }
-    const nextCustom = Array.isArray(data.customPlaceholders) ? data.customPlaceholders : []
-    snapshotRef.current = JSON.stringify({
-      name: existing?.name || 'Untitled template',
-      starred: Boolean(existing?.is_default),
-      page: nextPage,
-      custom: nextCustom,
-      header: headerEditor.getHTML(),
-      body: bodyEditor.getHTML(),
-      footer: footerEditor.getHTML(),
-    })
+    return () => { cancelled = true }
   }, [templateId, headerEditor, bodyEditor, footerEditor])
 
-  const insertToken = (token) => editor?.chain().focus().insertContent(token).run()
+  const insertToken = (token) => {
+    if (readOnly) return
+    editor?.chain().focus().insertContent(token).run()
+  }
 
   const addCustom = () => {
     const label = draft.trim()
     if (!label) return
-    const used = new Set([...COST_PLACEHOLDERS, ...custom].map((item) => item.token.replace(/[{}]/g, '')))
+    const used = new Set([...COST_PLACEHOLDERS, ...customerPlaceholders, ...custom].map((item) => item.token.replace(/[{}]/g, '')))
     setCustom((rows) => [...rows, { token: `{{${slug(label, used)}}}`, label, custom: true }])
     setDraft('')
     setAdding(false)
@@ -312,8 +337,9 @@ export function ReportTemplateEditor({ templateId, onBack }) {
 
   const isDirty = () => snapshotRef.current && snapshot() !== snapshotRef.current
 
-  const persist = () => {
-    const saved = saveReportTemplate({
+  const persist = async () => {
+    if (readOnly) return null
+    const saved = await saveReportTemplate({
       id: savedId || undefined,
       name: name.trim() || 'Untitled template',
       is_default: starred,
@@ -330,17 +356,17 @@ export function ReportTemplateEditor({ templateId, onBack }) {
     return saved
   }
 
-  const save = () => {
+  const save = async () => {
     try {
-      persist()
+      await persist()
       toast.success('Template saved')
     } catch (error) {
-      toast.error(error?.message || 'Failed to save template')
+      toast.error(templateError(error, 'Failed to save template'))
     }
   }
 
   const requestBack = () => {
-    if (isDirty()) {
+    if (!readOnly && isDirty()) {
       setLeaveOpen(true)
       return
     }
@@ -352,15 +378,15 @@ export function ReportTemplateEditor({ templateId, onBack }) {
     onBack()
   }
 
-  const saveAndLeave = () => {
+  const saveAndLeave = async () => {
     setSaving(true)
     try {
-      persist()
+      await persist()
       toast.success('Template saved')
       setLeaveOpen(false)
       onBack()
     } catch (error) {
-      toast.error(error?.message || 'Failed to save template')
+      toast.error(templateError(error, 'Failed to save template'))
     } finally {
       setSaving(false)
     }
@@ -394,7 +420,7 @@ export function ReportTemplateEditor({ templateId, onBack }) {
     sheet.addRow(['Footer', textFromHtml(footerEditor?.getHTML())])
     sheet.addRow([])
     sheet.addRow(['Placeholders'])
-    ;[...COST_PLACEHOLDERS, ...custom].forEach((item) => sheet.addRow([item.label, item.token]))
+    ;[...COST_PLACEHOLDERS, ...customerPlaceholders, ...custom].forEach((item) => sheet.addRow([item.label, item.token]))
     const buffer = await workbook.xlsx.writeBuffer()
     downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${name || 'template'}.xlsx`)
   }
@@ -417,8 +443,6 @@ export function ReportTemplateEditor({ templateId, onBack }) {
   const [width, height] = PAGE_PX[page.pageSize] || PAGE_PX.A4
   const pageWidth = page.orientation === 'landscape' ? height : width
   const pageHeight = page.orientation === 'landscape' ? width : height
-  const placeholders = [...COST_PLACEHOLDERS, ...custom]
-
   const panel = (key, title, extra, children) => (
     <div className="border-b border-border">
       <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground" onClick={() => setOpenSection((currentSection) => ({ ...currentSection, [key]: !currentSection[key] }))}>
@@ -436,7 +460,7 @@ export function ReportTemplateEditor({ templateId, onBack }) {
           <ArrowLeft className="mr-1 h-4 w-4" />
           Back
         </Button>
-        <Input value={name} onChange={(event) => setName(event.target.value)} className="h-8 max-w-xs" />
+        <Input value={name} onChange={(event) => setName(event.target.value)} className="h-8 max-w-xs" disabled={readOnly} />
         <div className="ml-auto flex items-center gap-1">
           <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom((value) => Math.max(0.5, +(value - 0.1).toFixed(1)))} aria-label="Zoom out"><ZoomOut className="h-4 w-4" /></Button>
           <span className="w-10 text-center text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
@@ -451,14 +475,14 @@ export function ReportTemplateEditor({ templateId, onBack }) {
               <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button type="button" className="h-8" onClick={save}><Save className="mr-1 h-4 w-4" />Save</Button>
+          {!readOnly && <Button type="button" className="h-8" onClick={save}><Save className="mr-1 h-4 w-4" />Save</Button>}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[440px] shrink-0 overflow-auto border-r border-border bg-background">
+        {!readOnly && <aside className="w-[440px] shrink-0 overflow-auto border-r border-border bg-background">
           {panel('placeholders', 'Placeholders', (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground" onClick={(event) => { event.stopPropagation(); setAdding(true); setOpenSection((currentSection) => ({ ...currentSection, placeholders: true })) }}><Plus className="h-3.5 w-3.5" /></span>
+            !readOnly && <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground" onClick={(event) => { event.stopPropagation(); setAdding(true); setOpenSection((currentSection) => ({ ...currentSection, placeholders: true })) }}><Plus className="h-3.5 w-3.5" /></span>
           ), (
             <>
               {adding && (
@@ -468,15 +492,34 @@ export function ReportTemplateEditor({ templateId, onBack }) {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-1.5">
-                {placeholders.map((item) => (
-                  <div key={item.token} className={`flex overflow-hidden rounded-md border text-[11px] font-medium ${item.custom ? 'border-primary/30 bg-secondary text-secondary-foreground' : 'border-border bg-muted text-foreground'}`}>
+                {COST_PLACEHOLDERS.map((item) => (
+                  <div key={item.token} className="flex overflow-hidden rounded-md border border-border bg-muted text-[11px] font-medium text-foreground">
                     <button type="button" className="min-w-0 flex-1 truncate px-2 py-2 text-left" title={item.token} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToken(item.token)}>{item.label}</button>
-                    {item.custom && (
-                      <button type="button" className="w-6 border-l border-border text-destructive" aria-label={`Remove ${item.label}`} onClick={() => setCustom((rows) => rows.filter((entry) => entry.token !== item.token))}><X className="mx-auto h-3 w-3" /></button>
-                    )}
                   </div>
                 ))}
               </div>
+              {customerPlaceholders.length > 0 && (
+                <>
+                  <p className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Customer columns</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {customerPlaceholders.map((item) => (
+                      <div key={item.token} className="flex overflow-hidden rounded-md border border-primary/20 bg-primary/5 text-[11px] font-medium text-foreground">
+                        <button type="button" className="min-w-0 flex-1 truncate px-2 py-2 text-left" title={item.token} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToken(item.token)}>{item.label}</button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {custom.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {custom.map((item) => (
+                    <div key={item.token} className="flex overflow-hidden rounded-md border border-primary/30 bg-secondary text-[11px] font-medium text-secondary-foreground">
+                      <button type="button" className="min-w-0 flex-1 truncate px-2 py-2 text-left" title={item.token} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToken(item.token)}>{item.label}</button>
+                      <button type="button" className="w-6 border-l border-border text-destructive" aria-label={`Remove ${item.label}`} onClick={() => setCustom((rows) => rows.filter((entry) => entry.token !== item.token))}><X className="mx-auto h-3 w-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           ))}
 
@@ -616,7 +659,7 @@ export function ReportTemplateEditor({ templateId, onBack }) {
               </div>
             </>
           ))}
-        </aside>
+        </aside>}
 
         <div className="min-h-0 flex-1 overflow-auto bg-muted py-6 pl-16">
           <div className="report-page mx-auto origin-top bg-background shadow-xl" style={{ width: pageWidth, minHeight: pageHeight, transform: `scale(${zoom})`, padding: `${page.margins.top}mm ${page.margins.right}mm ${page.margins.bottom}mm ${page.margins.left}mm`, fontFamily: page.fontFamily, fontSize: page.fontSize, display: 'flex', flexDirection: 'column' }}>
@@ -626,6 +669,10 @@ export function ReportTemplateEditor({ templateId, onBack }) {
           </div>
         </div>
       </div>
+
+      {!readOnly && headerEditor && <SelectionFormatToolbar editor={headerEditor} />}
+      {!readOnly && bodyEditor && <SelectionFormatToolbar editor={bodyEditor} />}
+      {!readOnly && footerEditor && <SelectionFormatToolbar editor={footerEditor} />}
 
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent className="max-w-[460px]">

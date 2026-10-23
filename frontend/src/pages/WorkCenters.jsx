@@ -128,10 +128,12 @@ export function WorkCenters({ embedded = false }) {
         <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search work centers" />
         <div className="ml-auto flex items-center gap-2">
           <TableToolsMenu entityType="work_center" isAdmin={isAdmin} fields={fields} onFields={loadWorkCenters} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Work Centers" />
-          <Button className="h-8" onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Work Center
-          </Button>
+          {isAdmin && (
+            <Button className="h-8" onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Work Center
+            </Button>
+          )}
         </div>
       </div>
 
@@ -145,17 +147,17 @@ export function WorkCenters({ embedded = false }) {
                 {shown.visible.map((column) => (
                   <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
                 ))}
-                <TableHead className="w-20 text-right">Actions</TableHead>
+                {isAdmin && <TableHead className="w-20 text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={shown.visible.length + 2} className="text-center">Loading...</TableCell>
+                  <TableCell colSpan={shown.visible.length + (isAdmin ? 2 : 1)} className="text-center">Loading...</TableCell>
                 </TableRow>
               ) : page.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={shown.visible.length + 2} className="text-center text-muted-foreground">No work centers found</TableCell>
+                  <TableCell colSpan={shown.visible.length + (isAdmin ? 2 : 1)} className="text-center text-muted-foreground">No work centers found</TableCell>
                 </TableRow>
               ) : (
                 page.rows.map((item, index) => (
@@ -166,9 +168,11 @@ export function WorkCenters({ embedded = false }) {
                         {column.custom ? (item.custom_fields?.[column.key] || '-') : (item[column.key] || '-')}
                       </TableCell>
                     ))}
-                    <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
-                      <RowActions onEdit={() => openEdit(item)} onDelete={() => handleDelete(item.id)} />
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
+                        <RowActions onEdit={() => openEdit(item)} onDelete={() => handleDelete(item.id)} />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

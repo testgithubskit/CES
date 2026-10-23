@@ -14,6 +14,7 @@ from app.models.operation import Operation
 from app.models.cost_estimation import CostEstimation
 from app.models.estimation_additional_cost import EstimationAdditionalCost
 from app.models.estimation_operation_cost import EstimationOperationCost
+from app.models.report_template import ReportTemplate
 
 __all__ = [
     "User",
@@ -32,4 +33,5 @@ __all__ = [
     "CostEstimation",
     "EstimationAdditionalCost",
     "EstimationOperationCost",
+    "ReportTemplate",
 ]

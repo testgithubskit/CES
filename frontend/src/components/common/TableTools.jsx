@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
 import { TableHead } from '../ui/table'
+import { Hint } from '../ui/tooltip'
 
 export function useTableTools(rows, searchKeys) {
   const [query, setQuery] = useState('')
@@ -40,17 +41,38 @@ export function useTableTools(rows, searchKeys) {
   return { query, setQuery, sort, toggleSort, rows: filtered }
 }
 
-export function TableSearch({ value, onChange, placeholder = 'Search' }) {
+export function TableSearch({ value, onChange, placeholder = 'Search', className = 'w-56' }) {
   return (
-    <div className="relative w-56">
+    <div className={`relative ${className}`}>
       <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full border border-input bg-background pl-7 pr-2 text-xs"
+        className={`h-8 w-full border border-input bg-background pl-7 text-xs ${value ? 'pr-8' : 'pr-2'}`}
+      />
+      <ClearFilter
+        show={Boolean(value)}
+        className="absolute right-0 top-0"
+        onClear={() => onChange('')}
       />
     </div>
+  )
+}
+
+export function ClearFilter({ show, onClear, className = '' }) {
+  if (!show) return null
+  return (
+    <Hint label="Clear">
+      <button
+        type="button"
+        aria-label="Clear"
+        className={`flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground ${className}`}
+        onClick={onClear}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </Hint>
   )
 }
 

@@ -44,11 +44,13 @@ function additionalTable(summary) {
 
 function values(summary, customer) {
   return {
+    ...(customer?.custom_fields || {}),
     product_name: summary.product_name || '',
     product_number: summary.product_number || '',
     quantity: summary.quantity ?? '',
     date: new Date().toLocaleDateString('en-IN'),
     company_name: customer?.company_name || '',
+    branch: customer?.branch || '',
     customer_name: customer?.contact_person || '',
     email: customer?.email || '',
     mobile: customer?.contact_number || '',

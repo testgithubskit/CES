@@ -132,12 +132,14 @@ export function Customers({ embedded = false }) {
         <div className="ml-auto flex items-center gap-2">
           <TableToolsMenu entityType="customer" isAdmin={isAdmin} fields={fields} onFields={loadCustomers} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Customers" />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          {isAdmin && (
           <DialogTrigger asChild>
             <Button onClick={openCreateDialog}>
               <Plus className="mr-2 h-4 w-4" />
               New Customer
             </Button>
           </DialogTrigger>
+          )}
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{editingItem ? 'Edit Customer' : 'Create Customer'}</DialogTitle>
@@ -214,19 +216,19 @@ export function Customers({ embedded = false }) {
                 {shown.visible.map((column) => (
                   <SortHead key={column.key} label={column.label} column={column.key} sort={tools.sort} onSort={tools.toggleSort} />
                 ))}
-                <TableHead className="w-20 text-right">Actions</TableHead>
+                {isAdmin && <TableHead className="w-20 text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={shown.visible.length + 2} className="text-center">
+                  <TableCell colSpan={shown.visible.length + (isAdmin ? 2 : 1)} className="text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : page.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={shown.visible.length + 2} className="text-center text-muted-foreground">
+                  <TableCell colSpan={shown.visible.length + (isAdmin ? 2 : 1)} className="text-center text-muted-foreground">
                     No customers found
                   </TableCell>
                 </TableRow>
@@ -239,9 +241,11 @@ export function Customers({ embedded = false }) {
                         {(column.custom ? item.custom_fields?.[column.key] : item[column.key]) || '-'}
                       </TableCell>
                     ))}
-                    <TableCell className="text-right">
-                      <RowActions onEdit={() => openEditDialog(item)} onDelete={() => handleDelete(item.id)} />
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-right">
+                        <RowActions onEdit={() => openEditDialog(item)} onDelete={() => handleDelete(item.id)} />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

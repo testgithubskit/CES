@@ -145,10 +145,12 @@ export function Machines() {
           <div className="flex items-center gap-2">
             <TableSearch value={tools.query} onChange={tools.setQuery} placeholder="Search machines" />
             <TableToolsMenu entityType="machine" isAdmin={isAdmin} fields={fields} onFields={load} columns={columns} isShown={shown.isShown} onToggle={shown.toggle} rows={tools.rows} title="Machines" />
-            <Button className="h-8" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Machine
-            </Button>
+            {isAdmin && (
+              <Button className="h-8" onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Machine
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -16,9 +16,11 @@ import { documentsService } from '../services/api/documents'
 import { machinesService } from '../services/api/machines'
 import { DocumentViewer } from '../components/common/DocumentViewer'
 import { ModelViewer3D } from '../components/common/ModelViewer3D'
+import { useConfirm } from '../components/common/ConfirmDialog'
 
 export function PartDetail() {
   const { id } = useParams()
+  const confirm = useConfirm()
   const [part, setPart] = useState(null)
   const [documents, setDocuments] = useState([])
   const [processPlan, setProcessPlan] = useState(null)
@@ -125,7 +127,7 @@ export function PartDetail() {
   }
 
   const handleDeleteOperation = async (operationId) => {
-    if (!confirm('Are you sure you want to delete this operation?')) return
+    if (!(await confirm({ title: 'Delete operation', description: 'Delete this operation? This cannot be undone.' }))) return
     try {
       await processPlanService.deleteOperation(operationId)
       toast.success('Operation deleted successfully')

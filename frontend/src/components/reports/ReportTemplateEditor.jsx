@@ -18,12 +18,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart,
   ArrowLeft, Baseline, BetweenHorizontalEnd, BetweenHorizontalStart, BetweenVerticalEnd, BetweenVerticalStart,
-  Bold, Highlighter, ImagePlus, Italic, Minus, Plus, RemoveFormatting, Save, Square, Strikethrough, Table as TableIcon, Trash2, Underline as UnderlineIcon, X, ZoomIn, ZoomOut,
+  Bold, FileSpreadsheet, FileText, Highlighter, ImagePlus, Italic, Minus, Plus, RemoveFormatting, Save, Square, Strikethrough, Table as TableIcon, Trash2, Underline as UnderlineIcon, X, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import ExcelJS from 'exceljs'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Switch } from '../ui/switch'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../ui/dropdown-menu'
 import apiClient from '../../services/api/client'
 import { COST_PLACEHOLDERS, DEFAULT_PAGE_SETTINGS, PAGE_SIZES, getReportTemplate, saveReportTemplate } from '../../services/reportTemplates'
 
@@ -70,7 +73,6 @@ const FontSize = Extension.create({
 function ReportSection({ sectionKey, label, editor, spacing, onActive }) {
   const [hover, setHover] = useState(false)
   const motionProps = SECTION_MOTION[sectionKey]
-  const from = sectionKey === 'footer' ? 10 : -10
   return (
     <motion.div
       className={sectionKey === 'body' ? 'relative min-h-0 flex-1' : 'relative'}
@@ -85,11 +87,11 @@ function ReportSection({ sectionKey, label, editor, spacing, onActive }) {
       <AnimatePresence>
         {hover && (
           <motion.span
-            initial={{ opacity: 0, y: from }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: from }}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
             transition={{ duration: 0.18 }}
-            className="mb-1 inline-block rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground"
+            className="pointer-events-none absolute left-0 top-1 z-20 -translate-x-[calc(100%+10px)] rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground"
           >
             {label}
           </motion.span>
@@ -181,6 +183,40 @@ function extensions(placeholder) {
   ]
 }
 
+function MergeCellsIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <rect x="3" y="7" width="7" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="14" y="7" width="7" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function SplitCellsIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <rect x="2.5" y="7" width="7" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="14.5" y="7" width="7" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+function textFromHtml(html) {
+  const node = document.createElement('div')
+  node.innerHTML = html || ''
+  return (node.innerText || '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function ToolButton({ label, active, danger, disabled, onClick, children }) {
   return (
     <button
@@ -209,8 +245,12 @@ export function ReportTemplateEditor({ templateId, onBack }) {
   const [active, setActive] = useState('body')
   const [, setTick] = useState(0)
   const [borderColor, setBorderColor] = useState('#111111')
+  const [savedId, setSavedId] = useState(templateId || null)
+  const [leaveOpen, setLeaveOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const fileRef = useRef(null)
   const loaded = useRef(false)
+  const snapshotRef = useRef('')
   const bump = () => setTick((value) => value + 1)
 
   const headerEditor = useEditor({ extensions: extensions('Header — click placeholders to insert...'), content: '', onFocus: () => setActive('header'), onSelectionUpdate: bump, onTransaction: bump })
@@ -236,6 +276,17 @@ export function ReportTemplateEditor({ templateId, onBack }) {
     headerEditor.commands.setContent(data.headerHtml || '<p></p>')
     bodyEditor.commands.setContent(data.bodyHtml || (existing ? '<p></p>' : '<p>{{product_name}} · {{product_number}}</p><p>Qty {{quantity}} · {{date}}</p><p>{{operations_table}}</p><p><strong>Grand total {{grand_total}}</strong></p>'))
     footerEditor.commands.setContent(data.footerHtml || '<p>{{product_number}}</p>')
+    const nextPage = { ...DEFAULT_PAGE_SETTINGS, ...data, margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) } }
+    const nextCustom = Array.isArray(data.customPlaceholders) ? data.customPlaceholders : []
+    snapshotRef.current = JSON.stringify({
+      name: existing?.name || 'Untitled template',
+      starred: Boolean(existing?.is_default),
+      page: nextPage,
+      custom: nextCustom,
+      header: headerEditor.getHTML(),
+      body: bodyEditor.getHTML(),
+      footer: footerEditor.getHTML(),
+    })
   }, [templateId, headerEditor, bodyEditor, footerEditor])
 
   const insertToken = (token) => editor?.chain().focus().insertContent(token).run()
@@ -249,9 +300,21 @@ export function ReportTemplateEditor({ templateId, onBack }) {
     setAdding(false)
   }
 
-  const save = () => {
-    saveReportTemplate({
-      id: templateId,
+  const snapshot = () => JSON.stringify({
+    name: name.trim() || 'Untitled template',
+    starred,
+    page,
+    custom,
+    header: headerEditor?.getHTML() || '',
+    body: bodyEditor?.getHTML() || '',
+    footer: footerEditor?.getHTML() || '',
+  })
+
+  const isDirty = () => snapshotRef.current && snapshot() !== snapshotRef.current
+
+  const persist = () => {
+    const saved = saveReportTemplate({
+      id: savedId || undefined,
       name: name.trim() || 'Untitled template',
       is_default: starred,
       template_data: {
@@ -262,29 +325,78 @@ export function ReportTemplateEditor({ templateId, onBack }) {
         footerHtml: footerEditor?.getHTML() || '',
       },
     })
-    toast.success('Template saved')
+    setSavedId(saved.id)
+    snapshotRef.current = snapshot()
+    return saved
+  }
+
+  const save = () => {
+    try {
+      persist()
+      toast.success('Template saved')
+    } catch (error) {
+      toast.error(error?.message || 'Failed to save template')
+    }
+  }
+
+  const requestBack = () => {
+    if (isDirty()) {
+      setLeaveOpen(true)
+      return
+    }
     onBack()
   }
 
-  const exportPreview = async () => {
+  const discardAndLeave = () => {
+    setLeaveOpen(false)
+    onBack()
+  }
+
+  const saveAndLeave = () => {
+    setSaving(true)
+    try {
+      persist()
+      toast.success('Template saved')
+      setLeaveOpen(false)
+      onBack()
+    } catch (error) {
+      toast.error(error?.message || 'Failed to save template')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const exportPdf = async () => {
     const html = `<!DOCTYPE html><html><head><title>${name}</title></head><body>${headerEditor?.getHTML() || ''}<div>${bodyEditor?.getHTML() || ''}</div>${footerEditor?.getHTML() || ''}</body></html>`
+    const filename = `${name || 'template'}.pdf`
     try {
       const response = await apiClient.post('/api/v1/reports/pdf', {
         html,
         page_size: page.pageSize,
         orientation: page.orientation,
-        filename: `${name || 'template'}.pdf`,
+        filename,
       }, { responseType: 'blob' })
       const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${name || 'template'}.pdf`
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, filename)
     } catch {
       toast.error('Chromium PDF is unavailable. Start the API after Chromium is installed.')
     }
+  }
+
+  const exportExcel = async () => {
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Template')
+    sheet.columns = [{ width: 16 }, { width: 80 }]
+    sheet.addRow(['Name', name.trim() || 'Untitled template'])
+    sheet.addRow(['Page', `${page.pageSize} ${page.orientation}`])
+    sheet.addRow(['Header', textFromHtml(headerEditor?.getHTML())])
+    sheet.addRow(['Body', textFromHtml(bodyEditor?.getHTML())])
+    sheet.addRow(['Footer', textFromHtml(footerEditor?.getHTML())])
+    sheet.addRow([])
+    sheet.addRow(['Placeholders'])
+    ;[...COST_PLACEHOLDERS, ...custom].forEach((item) => sheet.addRow([item.label, item.token]))
+    const buffer = await workbook.xlsx.writeBuffer()
+    downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${name || 'template'}.xlsx`)
   }
 
   const uploadLogo = (file) => {
@@ -320,7 +432,7 @@ export function ReportTemplateEditor({ templateId, onBack }) {
   return (
     <div className="flex h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-muted text-foreground">
       <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-3 py-2">
-        <Button type="button" variant="ghost" className="h-8" onClick={onBack}>
+        <Button type="button" variant="ghost" className="h-8" onClick={requestBack}>
           <ArrowLeft className="mr-1 h-4 w-4" />
           Back
         </Button>
@@ -329,7 +441,16 @@ export function ReportTemplateEditor({ templateId, onBack }) {
           <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom((value) => Math.max(0.5, +(value - 0.1).toFixed(1)))} aria-label="Zoom out"><ZoomOut className="h-4 w-4" /></Button>
           <span className="w-10 text-center text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
           <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setZoom((value) => Math.min(1.4, +(value + 0.1).toFixed(1)))} aria-label="Zoom in"><ZoomIn className="h-4 w-4" /></Button>
-          <Button type="button" variant="outline" className="h-8" onClick={exportPreview}>Export</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="h-8">Export</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Download as</DropdownMenuLabel>
+              <DropdownMenuItem onClick={exportPdf}><FileText className="mr-2 h-4 w-4" />PDF</DropdownMenuItem>
+              <DropdownMenuItem onClick={exportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" />Excel</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button type="button" className="h-8" onClick={save}><Save className="mr-1 h-4 w-4" />Save</Button>
         </div>
       </div>
@@ -468,6 +589,8 @@ export function ReportTemplateEditor({ templateId, onBack }) {
                 <ToolButton label="Add column left" disabled={!inTable} onClick={() => editor?.chain().focus().addColumnBefore().run()}><BetweenVerticalStart className="h-3.5 w-3.5" /></ToolButton>
                 <ToolButton label="Add column right" disabled={!inTable} onClick={() => editor?.chain().focus().addColumnAfter().run()}><BetweenVerticalEnd className="h-3.5 w-3.5" /></ToolButton>
                 <ToolButton label="Delete column" danger disabled={!inTable} onClick={() => editor?.chain().focus().deleteColumn().run()}><X className="h-3.5 w-3.5" /></ToolButton>
+                <ToolButton label="Merge cells" disabled={!inTable} onClick={() => editor?.chain().focus().mergeCells().run()}><MergeCellsIcon className="h-3.5 w-3.5" /></ToolButton>
+                <ToolButton label="Split cell" disabled={!inTable} onClick={() => editor?.chain().focus().splitCell().run()}><SplitCellsIcon className="h-3.5 w-3.5" /></ToolButton>
               </div>
               <div className="flex flex-wrap gap-1 rounded-md bg-muted p-1">
                 <ToolButton label="All borders" disabled={!inTable} onClick={() => setCells(Object.fromEntries(BORDER_SIDES.map((side) => [side, `1px solid ${borderColor}`])))}><Square className="h-3.5 w-3.5" /></ToolButton>
@@ -495,7 +618,7 @@ export function ReportTemplateEditor({ templateId, onBack }) {
           ))}
         </aside>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-muted py-6">
+        <div className="min-h-0 flex-1 overflow-auto bg-muted py-6 pl-16">
           <div className="report-page mx-auto origin-top bg-background shadow-xl" style={{ width: pageWidth, minHeight: pageHeight, transform: `scale(${zoom})`, padding: `${page.margins.top}mm ${page.margins.right}mm ${page.margins.bottom}mm ${page.margins.left}mm`, fontFamily: page.fontFamily, fontSize: page.fontSize, display: 'flex', flexDirection: 'column' }}>
             <ReportSection sectionKey="header" label="Header" editor={headerEditor} onActive={setActive} />
             <ReportSection sectionKey="body" label="Body" editor={bodyEditor} onActive={setActive} spacing={{ marginTop: `${page.headerSpacing || 0}mm`, marginBottom: `${page.footerSpacing || 0}mm` }} />
@@ -503,6 +626,25 @@ export function ReportTemplateEditor({ templateId, onBack }) {
           </div>
         </div>
       </div>
+
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent className="max-w-[460px]">
+          <div className="flex gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-orange-500">
+              <Save className="h-5 w-5" />
+            </div>
+            <DialogHeader className="space-y-1 text-left">
+              <DialogTitle className="uppercase tracking-wide">Unsaved changes</DialogTitle>
+              <DialogDescription>You haven&apos;t saved this template. Do you want to save your changes before leaving?</DialogDescription>
+            </DialogHeader>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setLeaveOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10" onClick={discardAndLeave}>No (Discard)</Button>
+            <Button type="button" onClick={saveAndLeave} disabled={saving}><Save className="mr-1 h-4 w-4" />Yes (Save)</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

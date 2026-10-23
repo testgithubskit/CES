@@ -1,3 +1,5 @@
+import asyncio
+import sys
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
@@ -5,6 +7,10 @@ from pydantic import BaseModel, Field
 from playwright.sync_api import sync_playwright
 
 from app.core.dependencies import get_current_user
+
+# Fix for Windows asyncio subprocess issue
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 router = APIRouter(prefix="/api/v1/reports", tags=["Reports"])
 

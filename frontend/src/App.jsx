@@ -3,6 +3,7 @@ import { ThemeProvider } from './hooks/use-theme'
 import { AuthProvider } from './hooks/use-auth'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from './components/ui/tooltip'
+import { ConfirmProvider } from './components/common/ConfirmDialog'
 import { useTheme } from './hooks/use-theme'
 import { Check, X } from 'lucide-react'
 import { ProtectedRoute } from './components/common/ProtectedRoute'
@@ -38,6 +39,7 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <TooltipProvider delayDuration={180}>
+        <ConfirmProvider>
         <AuthProvider>
           <Routes>
             <Route element={<PublicLayout />}>
@@ -72,6 +74,7 @@ function App() {
           </Routes>
           <AppToaster />
         </AuthProvider>
+        </ConfirmProvider>
         </TooltipProvider>
       </ThemeProvider>
     </BrowserRouter>

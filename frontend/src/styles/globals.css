@@ -151,10 +151,45 @@ html.dark *::-webkit-scrollbar-thumb {
 
 .report-page .ProseMirror th,
 .report-page .ProseMirror td {
+  position: relative;
   min-width: 1em;
   border: 1px solid #111;
   padding: 4px 6px;
   vertical-align: top;
+}
+
+.report-page .ProseMirror .selectedCell:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: hsl(var(--primary) / 0.16);
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: -1px;
+}
+
+.template-preview table {
+  width: 100%;
+  margin: 6px 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.template-preview th,
+.template-preview td {
+  border: 1px solid #111;
+  padding: 3px 5px;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.template-preview p {
+  margin: 0.25em 0;
+}
+
+.template-preview img {
+  max-width: 72px;
+  height: auto;
 }
 
 .report-page .ProseMirror img {

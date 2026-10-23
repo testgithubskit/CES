@@ -10,6 +10,7 @@ import { TablePager } from '../common/TablePager'
 import { productsService } from '../../services/api/products'
 import { customersService } from '../../services/api/customers'
 import { downloadCostExcel, downloadCostPdf } from './productCostExport'
+import { useConfirm } from '../common/ConfirmDialog'
 
 function money(value) {
   return Number(value || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
@@ -24,6 +25,7 @@ const cards = [
 ]
 
 export function ProductCost({ productId }) {
+  const confirm = useConfirm()
   const [summary, setSummary] = useState(null)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
@@ -92,6 +94,7 @@ export function ProductCost({ productId }) {
   }
 
   const removeCost = async (costId) => {
+    if (!(await confirm({ title: 'Delete cost', description: 'Delete this additional cost? This cannot be undone.' }))) return
     try {
       setSummary(await productsService.deleteAdditionalCost(productId, costId))
     } catch (error) {

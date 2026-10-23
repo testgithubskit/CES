@@ -11,6 +11,7 @@ import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { useAuth } from '../hooks/use-auth'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import apiClient, { readList, shareGet } from '../services/api/client'
 import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
@@ -18,6 +19,7 @@ const emptyForm = { name: '', email: '', role: 'user', is_active: true, password
 
 export function AccessControl({ embedded = false }) {
   const { user: currentUser } = useAuth()
+  const confirm = useConfirm()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
@@ -103,7 +105,7 @@ export function AccessControl({ embedded = false }) {
   }
 
   const remove = async (user) => {
-    if (!confirm(`Delete ${user.name}?`)) return
+    if (!(await confirm({ title: 'Delete user', description: `Delete ${user.name}? This cannot be undone.` }))) return
     try {
       await apiClient.delete(`/api/v1/users/${user.id}`)
       toast.success('User deleted')

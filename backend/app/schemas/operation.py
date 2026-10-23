@@ -60,6 +60,40 @@ class OperationCreate(OperationBase):
     pass
 
 
+class OperationBulkItem(BaseModel):
+    operation_name: str = Field(..., min_length=1, max_length=255)
+    operation_type: str = Field(default="in_house", max_length=50)
+    work_center_id: int = Field(..., gt=0)
+    machine_id: int = Field(..., gt=0)
+    setup_time: str = Field(..., max_length=20)
+    cycle_time: str = Field(..., max_length=20)
+    work_instructions: Optional[str] = None
+    notes: Optional[str] = None
+    operation_number: Optional[str] = Field(None, max_length=50)
+
+    @field_validator("operation_type")
+    @classmethod
+    def validate_operation_type(cls, value: str) -> str:
+        if value not in OPERATION_TYPES:
+            raise ValueError("Operation type must be in_house or out_source")
+        return value
+
+    @field_validator("setup_time")
+    @classmethod
+    def validate_setup_time(cls, value: str) -> str:
+        return _check_setup_time(value)
+
+    @field_validator("cycle_time")
+    @classmethod
+    def validate_cycle_time(cls, value: str) -> str:
+        return _check_cycle_time(value)
+
+
+class OperationBulkCreate(BaseModel):
+    part_id: int = Field(..., gt=0)
+    operations: list[OperationBulkItem]
+
+
 class OperationUpdate(BaseModel):
     part_id: Optional[int] = Field(None, gt=0)
     operation_name: Optional[str] = Field(None, min_length=1, max_length=255)

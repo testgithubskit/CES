@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../components/ui/alert-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table'
 import { productsService } from '../services/api/products'
@@ -15,10 +16,12 @@ import { documentsService } from '../services/api/documents'
 import { PartPreview } from '../components/bom/PartPreview'
 import { ProductCost } from '../components/bom/ProductCost'
 import { BulkPartsDialog } from '../components/bom/BulkPartsDialog'
+import { BulkOperationsDialog } from '../components/bom/BulkOperationsDialog'
 import { downloadBom } from '../components/bom/bomExport'
 import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { TablePager, usePage } from '../components/common/TablePager'
+import { useConfirm } from '../components/common/ConfirmDialog'
 
 function errorMessage(error, fallback) {
   const detail = error.response?.data?.detail
@@ -126,6 +129,7 @@ function removePart(tree, partId) {
 export function ProductBom() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const confirm = useConfirm()
   const [hierarchy, setHierarchy] = useState(null)
   const [showProduct, setShowProduct] = useState(true)
   const [partTypes, setPartTypes] = useState([])
@@ -148,6 +152,9 @@ export function ProductBom() {
   const [detailTab, setDetailTab] = useState('plan')
   const [zoomKind, setZoomKind] = useState(null)
   const [bulk, setBulk] = useState(null)
+  const [bulkOps, setBulkOps] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const fileCache = useRef(new Map())
   const fileJobs = useRef(new Map())
   const operationTools = useTableTools(operations, ['operation_number', 'operation_name', 'operation_type', 'work_center_name', 'machine_name'])
@@ -347,6 +354,7 @@ export function ProductBom() {
       }
       toast.success(dialog.parentAssemblyId ? 'Sub assembly saved' : 'Assembly saved')
       setDialog(null)
+      setHasUnsavedChanges(false)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to save assembly'))
     }
@@ -391,6 +399,7 @@ export function ProductBom() {
       }
       toast.success('Part saved')
       setDialog(null)
+      setHasUnsavedChanges(false)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to save part'))
     }
@@ -420,9 +429,8 @@ export function ProductBom() {
         setOperations(next)
         rememberPart(selectedPart.id, (part) => ({ ...part, operations: next }))
       } else {
-        const created = []
         for (const row of operationRows) {
-          created.push(withNames(await operationsService.create({
+          const saved = withNames(await operationsService.create({
             part_id: selectedPart.id,
             operation_name: row.operation_name,
             operation_type: row.operation_type,
@@ -432,14 +440,15 @@ export function ProductBom() {
             machine_id: Number(row.machine_id),
             work_instructions: row.work_instructions || null,
             notes: row.notes || null,
-          })))
+          }))
+          const next = [...operations, saved]
+          setOperations(next)
+          rememberPart(selectedPart.id, (part) => ({ ...part, operations: next }))
         }
-        const next = [...operations, ...created]
-        setOperations(next)
-        rememberPart(selectedPart.id, (part) => ({ ...part, operations: next }))
       }
       toast.success('Operation saved')
       setDialog(null)
+      setHasUnsavedChanges(false)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to save operation'))
     }
@@ -488,48 +497,52 @@ export function ProductBom() {
       }
       toast.success(dialog.editing ? 'Document updated' : 'Document uploaded')
       setDialog(null)
+      setHasUnsavedChanges(false)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to upload document'))
     }
   }
 
   const deleteAssembly = async (assembly) => {
-    if (!confirm(`Delete ${assembly.assembly_name} and everything under it?`)) return
+    if (!(await confirm({ title: 'Delete assembly', description: `Delete ${assembly.assembly_name} and everything under it? This cannot be undone.` }))) return
     try {
       await bomService.deleteAssembly(assembly.id)
       setHierarchy((current) => current && removeAssembly(current, assembly.id))
       toast.success('Assembly deleted')
+      setHasUnsavedChanges(true)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete assembly'))
     }
   }
 
   const deletePart = async (part) => {
-    if (!confirm(`Delete ${part.part_name}?`)) return
+    if (!(await confirm({ title: 'Delete part', description: `Delete ${part.part_name}? This cannot be undone.` }))) return
     try {
       await bomService.deletePart(part.id)
       if (selectedPart?.id === part.id) setSelectedPart(null)
       setHierarchy((current) => current && removePart(current, part.id))
       toast.success('Part deleted')
+      setHasUnsavedChanges(true)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete part'))
     }
   }
 
   const deleteOperation = async (operation) => {
-    if (!confirm(`Delete operation ${operation.operation_number}?`)) return
+    if (!(await confirm({ title: 'Delete operation', description: `Delete operation ${operation.operation_number}? This cannot be undone.` }))) return
     try {
       await operationsService.delete(operation.id)
       const next = operations.filter((item) => item.id !== operation.id)
       setOperations(next)
       rememberPart(selectedPart.id, (part) => ({ ...part, operations: next }))
+      setHasUnsavedChanges(true)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete operation'))
     }
   }
 
   const deleteDocument = async (document) => {
-    if (!confirm(`Delete ${document.file_name}?`)) return
+    if (!(await confirm({ title: 'Delete document', description: `Delete ${document.file_name}? This cannot be undone.` }))) return
     try {
       await documentsService.deleteDocument(document.id)
       const next = documents.filter((item) => item.id !== document.id)
@@ -537,19 +550,41 @@ export function ProductBom() {
       if (doc2dId === document.id) setDoc2dId(null)
       if (doc3dId === document.id) setDoc3dId(null)
       rememberPart(selectedPart.id, (part) => ({ ...part, documents: next }))
+      setHasUnsavedChanges(true)
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete document'))
     }
   }
 
   const deleteProduct = async () => {
-    if (!hierarchy || !confirm(`Delete product ${hierarchy.product_name}?`)) return
+    if (!hierarchy || !(await confirm({ title: 'Delete product', description: `Delete product ${hierarchy.product_name}? This cannot be undone.` }))) return
     try {
       await productsService.delete(hierarchy.id)
       navigate('/products')
     } catch (error) {
       toast.error(errorMessage(error, 'Failed to delete product'))
     }
+  }
+
+  const handleBackNavigation = () => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedDialog(true)
+    } else {
+      navigate('/products')
+    }
+  }
+
+  const handleUnsavedDialogAction = (action) => {
+    setShowUnsavedDialog(false)
+    if (action === 'save') {
+      // Save changes then navigate - for now just navigate as save is handled in dialogs
+      setHasUnsavedChanges(false)
+      navigate('/products')
+    } else if (action === 'discard') {
+      setHasUnsavedChanges(false)
+      navigate('/products')
+    }
+    // cancel does nothing
   }
 
   const nextOperationNumber = (index) => {
@@ -617,7 +652,7 @@ export function ProductBom() {
       <section className="flex w-[28rem] shrink-0 flex-col border-r border-border bg-background">
         <div className="flex h-16 shrink-0 items-center gap-2 border-b border-border px-2">
           <Hint label="Products">
-            <button type="button" className="rounded-md p-1 transition-colors hover:bg-accent" onClick={() => navigate('/products')} aria-label="Back to products">
+            <button type="button" className="rounded-md p-1 transition-colors hover:bg-accent" onClick={handleBackNavigation} aria-label="Back to products">
               <ArrowLeft className="h-4 w-4" />
             </button>
           </Hint>
@@ -744,6 +779,20 @@ export function ProductBom() {
             <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
               <div className="mb-2 flex items-center justify-end gap-2">
                 <TableSearch value={operationTools.query} onChange={operationTools.setQuery} placeholder="Search operations" />
+                <a href="/operations-template.docx" download="OperationsTemplate.docx" className="inline-flex items-center gap-1 text-xs font-semibold">
+                  <FileDown className="h-3.5 w-3.5" />Template
+                </a>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7"
+                  onClick={() => {
+                    ensureMachines().catch((error) => toast.error(errorMessage(error, 'Failed to load machines')))
+                    setBulkOps(true)
+                  }}
+                >
+                  <Upload className="mr-1 h-3.5 w-3.5" />Upload Bulk
+                </Button>
                 <Button size="sm" className="h-7" onClick={() => openOperationDialog()}>
                   <Plus className="mr-1 h-3.5 w-3.5" />Create Operation
                 </Button>
@@ -837,6 +886,27 @@ export function ProductBom() {
         onOpenChange={(open) => !open && setBulk(null)}
         onCreated={() => {
           productsService.getHierarchy(id).then(setHierarchy).catch((error) => toast.error(errorMessage(error, 'Failed to refresh BOM')))
+        }}
+      />
+
+      <BulkOperationsDialog
+        open={bulkOps}
+        partId={selectedPart?.id}
+        partName={selectedPart?.part_name}
+        workCenters={workCenters}
+        machines={machines}
+        onOpenChange={setBulkOps}
+        onCreated={() => {
+          if (!selectedPart) return
+          operationsService.getByPart(selectedPart.id).then((next) => {
+            const named = next.map((saved) => ({
+              ...saved,
+              work_center_name: workCenters.find((center) => center.id === saved.work_center_id)?.name || null,
+              machine_name: machines.find((machine) => machine.id === saved.machine_id)?.name || null,
+            }))
+            setOperations(named)
+            rememberPart(selectedPart.id, (part) => ({ ...part, operations: named }))
+          }).catch((error) => toast.error(errorMessage(error, 'Failed to refresh operations')))
         }}
       />
 
@@ -1017,6 +1087,26 @@ export function ProductBom() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>UNSAVED CHANGES</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes. Do you want to save them before leaving?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleUnsavedDialogAction('cancel')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleUnsavedDialogAction('discard')} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              No (Discard)
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => handleUnsavedDialogAction('save')}>
+              Yes (Save)
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

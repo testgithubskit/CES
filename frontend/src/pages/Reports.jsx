@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FileText, LayoutGrid, List, Pencil, Plus, RefreshCw, Star, Trash2 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ReportTemplateEditor } from '../components/reports/ReportTemplateEditor'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { deleteReportTemplate, listReportTemplates, starReportTemplate } from '../services/reportTemplates'
 
 function timeAgo(value) {
@@ -23,7 +24,7 @@ function Preview({ template }) {
       <div className="absolute inset-0 flex items-start justify-center pt-3">
         <div className="overflow-hidden bg-white shadow-sm" style={{ width: (landscape ? 900 : 640) * scale, height: (landscape ? 640 : 900) * scale }}>
           <div
-            className="origin-top-left text-black"
+            className="template-preview origin-top-left text-black"
             style={{ width: landscape ? 900 : 640, transform: `scale(${scale})`, fontFamily: data.fontFamily || 'Times New Roman', fontSize: data.fontSize || '12px', padding: '16px' }}
             dangerouslySetInnerHTML={{ __html: `${data.headerHtml || ''}${data.bodyHtml || ''}${data.footerHtml || ''}` || `<p>${template.name}</p>` }}
           />
@@ -40,8 +41,19 @@ export function Reports() {
   const [sortBy, setSortBy] = useState('recent')
   const [editorId, setEditorId] = useState(null)
   const [designing, setDesigning] = useState(false)
+  const confirm = useConfirm()
 
   const reload = () => setRows(listReportTemplates())
+
+  const removeTemplate = async (template) => {
+    const ok = await confirm({
+      title: 'Delete template',
+      description: `Delete ${template.name}? This cannot be undone.`,
+    })
+    if (!ok) return
+    deleteReportTemplate(template.id)
+    reload()
+  }
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -112,7 +124,7 @@ export function Reports() {
                     <p className="text-[11px] text-muted-foreground">{timeAgo(template.updated_at)}</p>
                   </div>
                   <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => { setEditorId(template.id); setDesigning(true) }} aria-label="Edit template"><Pencil className="h-4 w-4" /></button>
-                  <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => { if (confirm(`Delete ${template.name}?`)) { deleteReportTemplate(template.id); reload() } }} aria-label="Delete template"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => removeTemplate(template)} aria-label="Delete template"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             ))}
@@ -127,7 +139,7 @@ export function Reports() {
                   <p className="truncate text-sm font-semibold">{template.name}</p>
                   <p className="text-xs text-muted-foreground">{template.template_data?.pageSize || 'A4'} · {timeAgo(template.updated_at)}{template.is_default ? ' · Starred' : ''}</p>
                 </button>
-                <button type="button" onClick={() => { if (confirm(`Delete ${template.name}?`)) { deleteReportTemplate(template.id); reload() } }} aria-label="Delete template"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => removeTemplate(template)} aria-label="Delete template"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>

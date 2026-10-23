@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { productsService } from '../services/api/products'
 import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { useAuth } from '../hooks/use-auth'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { readList } from '../services/api/client'
 import { CustomFieldInputs, TableToolsMenu, keepWithin, useShownColumns } from '../components/common/entityColumns'
 
@@ -53,6 +54,7 @@ function formatDate(value) {
 
 export function Products() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [fields, setFields] = useState([])
   const [products, setProducts] = useState([])
@@ -141,7 +143,7 @@ export function Products() {
   })
 
   const handleDelete = async (product) => {
-    if (!confirm(`Delete ${product.product_name}?`)) return
+    if (!(await confirm({ title: 'Delete product', description: `Delete ${product.product_name}? This cannot be undone.` }))) return
     try {
       await productsService.delete(product.id)
       toast.success('Product deleted')

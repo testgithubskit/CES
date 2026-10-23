@@ -34,8 +34,8 @@ export const DEFAULT_PAGE_SETTINGS = {
   margins: { top: 5, right: 5, bottom: 5, left: 5 },
   headerSpacing: 0,
   footerSpacing: 0,
-  fontFamily: 'Times New Roman',
-  fontSize: '12px',
+  fontFamily: 'Calibri',
+  fontSize: '14px',
   customPlaceholders: [],
 }
 
@@ -70,6 +70,15 @@ function write(rows) {
   return rows
 }
 
+function newTemplateId() {
+  try {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID()
+  } catch {
+    /* HTTP origins may not expose randomUUID */
+  }
+  return `tpl-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export function listReportTemplates() {
   return read()
 }
@@ -86,10 +95,12 @@ export function getStarredTemplate() {
 export function saveReportTemplate(template) {
   const rows = read()
   const now = new Date().toISOString()
+  const id = template.id || newTemplateId()
+  const existing = rows.find((item) => item.id === id)
   const next = {
     ...template,
-    id: template.id || crypto.randomUUID(),
-    created_at: template.created_at || now,
+    id,
+    created_at: template.created_at || existing?.created_at || now,
     updated_at: now,
   }
   const index = rows.findIndex((item) => item.id === next.id)

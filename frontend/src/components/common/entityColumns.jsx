@@ -10,6 +10,7 @@ import { RowActions } from './RowActions'
 import { customFieldsService } from '../../services/api/customFields'
 import { downloadExcel, downloadPdf } from './tableExport'
 import { Hint, Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
+import { useConfirm } from './ConfirmDialog'
 
 const emptyColumn = { label: '', field_type: 'text', max_length: '40' }
 
@@ -110,6 +111,7 @@ export function TableToolsMenu({
   const [editing, setEditing] = useState(null)
   const [drafts, setDrafts] = useState([emptyColumn])
   const [picked, setPicked] = useState([])
+  const confirm = useConfirm()
   const visible = columns.filter((column) => isShown(column.key))
 
   const columnPayload = (row) => ({
@@ -140,7 +142,7 @@ export function TableToolsMenu({
   }
 
   const removeColumn = async (field) => {
-    if (!confirm(`Delete the ${field.label} column from every record?`)) return
+    if (!(await confirm({ title: 'Delete column', description: `Delete the ${field.label} column from every record? This cannot be undone.` }))) return
     try {
       await customFieldsService.remove(entityType, field.id)
       setPicked((current) => current.filter((id) => id !== field.id))
@@ -153,7 +155,7 @@ export function TableToolsMenu({
 
   const removePicked = async () => {
     if (!picked.length) return
-    if (!confirm(`Delete ${picked.length} custom column${picked.length === 1 ? '' : 's'} from every record?`)) return
+    if (!(await confirm({ title: 'Delete columns', description: `Delete ${picked.length} custom column${picked.length === 1 ? '' : 's'} from every record? This cannot be undone.` }))) return
     try {
       for (const id of picked) await customFieldsService.remove(entityType, id)
       setPicked([])

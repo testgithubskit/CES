@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { workCentersService } from '../services/api/workCenters'
 import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { useAuth } from '../hooks/use-auth'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { readList } from '../services/api/client'
 import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
@@ -28,6 +29,7 @@ function errorMessage(error, fallback) {
 export function WorkCenters({ embedded = false }) {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const confirm = useConfirm()
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [fields, setFields] = useState([])
   const [workCenters, setWorkCenters] = useState([])
@@ -88,7 +90,7 @@ export function WorkCenters({ embedded = false }) {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this work center?')) return
+    if (!(await confirm({ title: 'Delete work center', description: 'Delete this work center? This cannot be undone.' }))) return
     try {
       await workCentersService.delete(id)
       toast.success('Work center deleted')

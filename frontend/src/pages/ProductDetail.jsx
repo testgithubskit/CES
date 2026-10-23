@@ -9,9 +9,11 @@ import { Plus, ChevronRight, ChevronDown, Edit, Trash2, ArrowLeft } from 'lucide
 import { toast } from 'sonner'
 import { productsService } from '../services/api/products'
 import { bomService } from '../services/api/bom'
+import { useConfirm } from '../components/common/ConfirmDialog'
 
 export function ProductDetail() {
   const { id } = useParams()
+  const confirm = useConfirm()
   const [product, setProduct] = useState(null)
   const [assemblies, setAssemblies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -108,7 +110,7 @@ export function ProductDetail() {
   }
 
   const handleDelete = async (type, itemId) => {
-    if (!confirm(`Are you sure you want to delete this ${type}?`)) return
+    if (!(await confirm({ title: `Delete ${type}`, description: `Delete this ${type}? This cannot be undone.` }))) return
     try {
       if (type === 'assembly') {
         await bomService.deleteAssembly(itemId)

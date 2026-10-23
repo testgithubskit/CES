@@ -12,11 +12,13 @@ import { toast } from 'sonner'
 import { customersService } from '../services/api/customers'
 import { TablePager, useMeasuredPage } from '../components/common/TablePager'
 import { useAuth } from '../hooks/use-auth'
+import { useConfirm } from '../components/common/ConfirmDialog'
 import { readList } from '../services/api/client'
 import { CustomFieldInputs, TableToolsMenu, useShownColumns } from '../components/common/entityColumns'
 
 export function Customers({ embedded = false }) {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [fields, setFields] = useState([])
   const [customers, setCustomers] = useState([])
@@ -79,7 +81,7 @@ export function Customers({ embedded = false }) {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this customer?')) return
+    if (!(await confirm({ title: 'Delete customer', description: 'Delete this customer? This cannot be undone.' }))) return
     try {
       await customersService.delete(id)
       toast.success('Customer deleted successfully')

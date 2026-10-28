@@ -6,8 +6,7 @@ import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Input } from '../ui/input'
 
-const types = ['In-house', 'Out-source', 'Standard']
-const emptyRow = () => ({ part_number: '', part_name: '', size: '', quantity: '1', part_type: 'Standard', selected: true })
+const emptyRow = () => ({ part_number: '', part_name: '', size: '', quantity: '1', selected: true })
 
 function errorMessage(error, fallback) {
   const detail = error.response?.data?.detail
@@ -63,7 +62,6 @@ export function BulkPartsDialog({ open, productId, assemblyId, title, onOpenChan
           part_name: row.part_name.trim(),
           size: row.size.trim() || null,
           quantity: Number(row.quantity),
-          part_type: row.part_type,
         })),
       })
       toast.success(`${chosen.length} parts created`)
@@ -88,7 +86,7 @@ export function BulkPartsDialog({ open, productId, assemblyId, title, onOpenChan
         {!rows.length ? (
           <div className="space-y-3">
             <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              Download the parts template, fill Name of Part, Part No, Size, Part Quantity, and Part Type, then upload the .docx here. Parts are added under {title}.
+              Download the parts template, fill Name of Part, Part No, Size, and Part Quantity, then upload the .docx here. Parts are added under {title}.
             </p>
             <label
               className={`flex min-h-48 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed ${over ? 'bg-accent' : ''}`}
@@ -123,7 +121,6 @@ export function BulkPartsDialog({ open, productId, assemblyId, title, onOpenChan
                     <th className="px-2 py-2 text-left">Part name</th>
                     <th className="px-2 py-2 text-left">Size</th>
                     <th className="px-2 py-2 text-left">Qty</th>
-                    <th className="px-2 py-2 text-left">Type</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -135,11 +132,6 @@ export function BulkPartsDialog({ open, productId, assemblyId, title, onOpenChan
                       <td className="px-1 py-1"><Input className="h-8" value={row.part_name} onChange={(event) => update(index, { part_name: event.target.value })} /></td>
                       <td className="px-1 py-1"><Input className="h-8" value={row.size} onChange={(event) => update(index, { size: event.target.value })} /></td>
                       <td className="px-1 py-1"><Input className="h-8 w-16" value={row.quantity} onChange={(event) => update(index, { quantity: event.target.value.replace(/\D/g, '') })} /></td>
-                      <td className="px-1 py-1">
-                        <select className="h-8 w-full rounded-md border border-input bg-background px-2" value={row.part_type} onChange={(event) => update(index, { part_type: event.target.value })}>
-                          {types.map((type) => <option key={type}>{type}</option>)}
-                        </select>
-                      </td>
                       <td className="px-1"><button type="button" aria-label="Remove row" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-3.5 w-3.5" /></button></td>
                     </tr>
                   ))}

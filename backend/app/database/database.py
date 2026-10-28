@@ -6,7 +6,6 @@ from app.models import (
     MHRParticular,
     MachineMHRValue,
     Customer,
-    PartType,
     Product,
     CustomField,
     Assembly,

@@ -47,7 +47,7 @@ function previewKind(document) {
   return ['stl', 'step', 'stp'].includes(fileKind(document)) ? '3d' : '2d'
 }
 
-const emptyPart = () => ({ part_number: '', part_name: '', quantity: '1', part_type_id: '' })
+const emptyPart = () => ({ part_number: '', part_name: '', quantity: '1' })
 const emptyOperation = () => ({
   operation_name: '',
   operation_type: 'in_house',
@@ -161,7 +161,6 @@ export function ProductBom() {
   const confirm = useConfirm()
   const [hierarchy, setHierarchy] = useState(null)
   const [showProduct, setShowProduct] = useState(true)
-  const [partTypes, setPartTypes] = useState([])
   const [workCenters, setWorkCenters] = useState([])
   const [machines, setMachines] = useState([])
   const [selectedPart, setSelectedPart] = useState(null)
@@ -239,13 +238,6 @@ export function ProductBom() {
     setFile3d(next3d && fileCache.current.has(next3d) ? { id: next3d, data: fileCache.current.get(next3d) } : { id: next3d, data: null })
   }
 
-  const ensurePartTypes = async () => {
-    if (partTypes.length) return partTypes
-    const types = await lookupService.partTypes()
-    setPartTypes(types)
-    return types
-  }
-
   const ensureMachines = async () => {
     if (workCenters.length && machines.length) return
     const [centers, machineList] = await Promise.all([
@@ -311,7 +303,6 @@ export function ProductBom() {
   const openPartDialog = (assemblyId = null) => {
     setPartRows([emptyPart()])
     setDialog({ type: 'part', assemblyId, editing: null })
-    ensurePartTypes().catch((error) => toast.error(errorMessage(error, 'Failed to load part types')))
   }
 
   const openEditPart = (part) => {
@@ -319,10 +310,8 @@ export function ProductBom() {
       part_number: part.part_number,
       part_name: part.part_name,
       quantity: String(part.quantity),
-      part_type_id: String(part.part_type_id),
     }])
     setDialog({ type: 'part', assemblyId: part.assembly_id, editing: part })
-    ensurePartTypes().catch((error) => toast.error(errorMessage(error, 'Failed to load part types')))
   }
 
   const openOperationDialog = (operation = null) => {
@@ -399,16 +388,12 @@ export function ProductBom() {
           part_number: row.part_number,
           part_name: row.part_name,
           quantity: Number(row.quantity),
-          part_type_id: Number(row.part_type_id),
         })
-        const typeName = partTypes.find((type) => type.id === saved.part_type_id)?.name
         rememberPart(saved.id, (part) => ({
           ...part,
           part_number: saved.part_number,
           part_name: saved.part_name,
           quantity: Number(saved.quantity),
-          part_type_id: saved.part_type_id,
-          part_type_name: typeName || part.part_type_name,
         }))
       } else {
         for (const row of partRows) {
@@ -418,12 +403,10 @@ export function ProductBom() {
             part_number: row.part_number,
             part_name: row.part_name,
             quantity: Number(row.quantity),
-            part_type_id: Number(row.part_type_id),
           })
           setHierarchy((current) => current && insertPart(current, {
             ...saved,
             quantity: Number(saved.quantity),
-            part_type_name: partTypes.find((type) => type.id === saved.part_type_id)?.name || null,
           }))
         }
       }
@@ -636,6 +619,7 @@ export function ProductBom() {
           <span className="block truncate text-xs text-muted-foreground">{part.part_number}</span>
         </span>
       </button>
+      <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Part</span>
       <NodeMenu>
         <DropdownMenuItem onClick={() => openEditPart(part)}><Pencil className="mr-2 h-4 w-4" />Edit Part</DropdownMenuItem>
         <DropdownMenuItem onClick={() => deletePart(part)}><Trash2 className="mr-2 h-4 w-4" />Delete Part</DropdownMenuItem>
@@ -994,14 +978,10 @@ export function ProductBom() {
           <DialogHeader><DialogTitle>{dialog?.editing ? 'Edit Part' : 'Add Part'}</DialogTitle></DialogHeader>
           <form onSubmit={saveParts} className="space-y-3" autoComplete="off">
             {partRows.map((row, index) => (
-              <div key={index} className="grid grid-cols-4 gap-3">
+              <div key={index} className="grid grid-cols-3 gap-3">
                 <Input placeholder="Part number" value={row.part_number} required autoComplete="off" onChange={(event) => updateRow(setPartRows, index, { part_number: event.target.value })} />
                 <Input placeholder="Part name" value={row.part_name} required autoComplete="off" onChange={(event) => updateRow(setPartRows, index, { part_name: event.target.value })} />
                 <Input placeholder="Qty" type="number" min="1" step="1" value={row.quantity} required autoComplete="off" onChange={(event) => updateRow(setPartRows, index, { quantity: event.target.value })} />
-                <select className={fieldClass} required value={row.part_type_id} onChange={(event) => updateRow(setPartRows, index, { part_type_id: event.target.value })}>
-                  <option value="">Part type</option>
-                  {partTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-                </select>
               </div>
             ))}
             {!dialog?.editing && (

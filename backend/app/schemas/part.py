@@ -7,7 +7,6 @@ from app.schemas.product import as_whole_number
 class PartBase(BaseModel):
     product_id: int = Field(..., gt=0)
     assembly_id: Optional[int] = Field(None, gt=0)
-    part_type_id: int = Field(..., gt=0)
     part_number: str = Field(..., min_length=1, max_length=50)
     part_name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -29,7 +28,6 @@ class PartBulkItem(BaseModel):
     part_name: str = Field(..., min_length=1, max_length=255)
     size: Optional[str] = Field(None, max_length=100)
     quantity: int = Field(..., gt=0)
-    part_type: str = Field(..., min_length=1, max_length=255)
 
     @field_validator("quantity", mode="before")
     @classmethod
@@ -46,7 +44,6 @@ class PartBulkCreate(BaseModel):
 class PartUpdate(BaseModel):
     product_id: Optional[int] = Field(None, gt=0)
     assembly_id: Optional[int] = Field(None, gt=0)
-    part_type_id: Optional[int] = Field(None, gt=0)
     part_number: Optional[str] = Field(None, min_length=1, max_length=50)
     part_name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None

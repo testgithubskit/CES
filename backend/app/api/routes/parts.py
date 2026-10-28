@@ -15,15 +15,6 @@ from app.models.user import User
 router = APIRouter(prefix="/api/v1/parts", tags=["Parts"])
 
 WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-TYPE_NAMES = {
-    "in-house": "In-house",
-    "inhouse": "In-house",
-    "in house": "In-house",
-    "out-source": "Out-source",
-    "outsource": "Out-source",
-    "out source": "Out-source",
-    "standard": "Standard",
-}
 
 
 def _cell_text(cell) -> str:
@@ -52,7 +43,6 @@ def parse_parts_docx(content: bytes) -> list[dict]:
         number_index = column("part no", "part number")
         size_index = column("size")
         quantity_index = column("quantity", "qty", "no. of parts")
-        type_index = column("part type", "type")
         if name_index is None or number_index is None:
             continue
 
@@ -71,23 +61,8 @@ def parse_parts_docx(content: bytes) -> list[dict]:
                 "part_number": number,
                 "size": value(cells, size_index),
                 "quantity": value(cells, quantity_index) or "1",
-                "part_type": value(cells, type_index) or "Standard",
             })
     return extracted
-
-
-def _part_type(db: Session, label: str, user_id: int):
-    from app.models.part_type import PartType
-
-    key = " ".join(label.strip().lower().replace("_", " ").split())
-    canonical = TYPE_NAMES.get(key, label.strip())
-    existing = db.query(PartType).filter(PartType.name.ilike(canonical)).first()
-    if existing:
-        return existing
-    created = PartType(name=canonical, created_by=user_id)
-    db.add(created)
-    db.flush()
-    return created
 
 
 @router.post("/parse-template")
@@ -122,11 +97,9 @@ def create_parts_bulk(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assembly must belong to this product")
     created = []
     for item in body.parts:
-        part_type = _part_type(db, item.part_type, current_user.id)
         part = Part(
             product_id=body.product_id,
             assembly_id=body.assembly_id,
-            part_type_id=part_type.id,
             part_number=item.part_number.strip(),
             part_name=item.part_name.strip(),
             size=item.size.strip() if item.size else None,
@@ -177,15 +150,6 @@ def create_part(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Assembly must belong to the same product"
             )
-    
-    # Check if part type exists
-    from app.models.part_type import PartType
-    part_type = db.query(PartType).filter(PartType.id == part_data.part_type_id).first()
-    if not part_type:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Part type with id {part_data.part_type_id} not found"
-        )
     
     db_part = Part(
         **part_data.model_dump(),

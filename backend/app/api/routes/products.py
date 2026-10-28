@@ -54,8 +54,6 @@ class PartHierarchy(BaseModel):
     description: Optional[str] = None
     size: Optional[str] = None
     quantity: int
-    part_type_id: int
-    part_type_name: Optional[str] = None
     assembly_id: Optional[int] = None
     operations: List[OperationHierarchy] = []
     documents: List[DocumentHierarchy] = []
@@ -258,7 +256,6 @@ def get_product_hierarchy(
     
     # Get all parts for this product with eager loading
     all_parts = db.query(Part).options(
-        selectinload(Part.part_type),
         selectinload(Part.documents),
         selectinload(Part.operations).selectinload(Operation.work_center),
         selectinload(Part.operations).selectinload(Operation.machine),
@@ -302,8 +299,6 @@ def get_product_hierarchy(
             description=part.description,
             size=part.size,
             quantity=int(part.quantity),
-            part_type_id=part.part_type_id,
-            part_type_name=part.part_type.name if part.part_type else None,
             assembly_id=part.assembly_id,
             operations=operation_hierarchies,
             documents=[

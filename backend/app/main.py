@@ -9,7 +9,6 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.customers import router as customers_router
 from app.api.routes.work_centers import router as work_centers_router
 from app.api.routes.machines import router as machines_router
-from app.api.routes.part_types import router as part_types_router
 from app.api.routes.products import router as products_router
 from app.api.routes.assemblies import router as assemblies_router
 from app.api.routes.parts import router as parts_router
@@ -46,7 +45,6 @@ app.include_router(auth_router)
 app.include_router(customers_router)
 app.include_router(work_centers_router)
 app.include_router(machines_router)
-app.include_router(part_types_router)
 app.include_router(products_router)
 app.include_router(assemblies_router)
 app.include_router(parts_router)

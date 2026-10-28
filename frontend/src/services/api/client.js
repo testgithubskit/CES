@@ -31,7 +31,6 @@ const collectionPaths = new Set([
   '/api/v1/customers',
   '/api/v1/work-centers',
   '/api/v1/machines',
-  '/api/v1/part-types',
   '/api/v1/assemblies',
   '/api/v1/parts',
   '/api/v1/operations',

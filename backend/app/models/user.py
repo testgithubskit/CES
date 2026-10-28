@@ -16,7 +16,6 @@ class User(Base, TimestampMixin):
     # Relationships
     # created_by references
     mhr_particulars_created = relationship("MHRParticular", back_populates="created_by_user", foreign_keys="MHRParticular.created_by")
-    part_types_created = relationship("PartType", back_populates="created_by_user", foreign_keys="PartType.created_by")
     products_created = relationship("Product", back_populates="created_by_user", foreign_keys="Product.created_by")
     assemblies_created = relationship("Assembly", back_populates="created_by_user", foreign_keys="Assembly.created_by")
     parts_created = relationship("Part", back_populates="created_by_user", foreign_keys="Part.created_by")

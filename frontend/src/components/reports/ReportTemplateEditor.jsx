@@ -665,7 +665,7 @@ export function ReportTemplateEditor({ templateId, onBack, readOnly = false }) {
           <div className="report-page mx-auto origin-top bg-background shadow-xl" style={{ width: pageWidth, minHeight: pageHeight, transform: `scale(${zoom})`, padding: `${page.margins.top}mm ${page.margins.right}mm ${page.margins.bottom}mm ${page.margins.left}mm`, fontFamily: page.fontFamily, fontSize: page.fontSize, display: 'flex', flexDirection: 'column' }}>
             <ReportSection sectionKey="header" label="Header" editor={headerEditor} onActive={setActive} />
             <ReportSection sectionKey="body" label="Body" editor={bodyEditor} onActive={setActive} spacing={{ marginTop: `${page.headerSpacing || 0}mm`, marginBottom: `${page.footerSpacing || 0}mm` }} />
-            <ReportSection sectionKey="footer" label="Footer" editor={footerEditor} onActive={setActive} />
+            <ReportSection sectionKey="footer" label="Footer" editor={footerEditor} onActive={setActive} spacing={{ marginTop: 'auto' }} />
           </div>
         </div>
       </div>

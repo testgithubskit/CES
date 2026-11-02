@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Hint, Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
-import { ArrowLeft, Box, ChevronDown, ChevronRight, FileDown, MoreVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Box, ChevronDown, ChevronRight, Copy, FileDown, MoreVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -22,6 +22,8 @@ import { RowActions } from '../components/common/RowActions'
 import { SortHead, TableSearch, useTableTools } from '../components/common/TableTools'
 import { TablePager, usePage } from '../components/common/TablePager'
 import { useConfirm } from '../components/common/ConfirmDialog'
+import { useAuth } from '../hooks/use-auth'
+import { ProductVersionDialog } from '../components/bom/ProductVersionDialog'
 
 function errorMessage(error, fallback) {
   const detail = error.response?.data?.detail
@@ -43,8 +45,16 @@ function fileKind(document) {
   return (document.file_type || document.file_name?.split('.').pop() || '').toLowerCase()
 }
 
+function isFirstVersion(version) {
+  const text = String(version || '').trim().toLowerCase().replace(/^v/, '')
+  return text === '1'
+}
+
 function previewKind(document) {
-  return ['stl', 'step', 'stp'].includes(fileKind(document)) ? '3d' : '2d'
+  const kind = fileKind(document)
+  if (['stl', 'step', 'stp'].includes(kind)) return '3d'
+  if (['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif'].includes(kind)) return '2d'
+  return null
 }
 
 const emptyPart = () => ({ part_number: '', part_name: '', quantity: '1' })
@@ -58,7 +68,8 @@ const emptyOperation = () => ({
   work_instructions: '',
   notes: '',
 })
-const emptyDocument = () => ({ file: null, fileName: '', document_type: '2d', version: '', inputKey: 0 })
+const emptyDocument = () => ({ file: null, fileName: '', document_type: '2d', customType: '', showType: false, version: '', inputKey: 0 })
+const BLOCKED_UPLOADS = ['exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'ps1', 'vbs', 'dll', 'js', 'jar']
 
 const fieldClass = 'flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
@@ -159,6 +170,8 @@ export function ProductBom() {
   const { id } = useParams()
   const navigate = useNavigate()
   const confirm = useConfirm()
+  const { user } = useAuth()
+  const isAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [hierarchy, setHierarchy] = useState(null)
   const [showProduct, setShowProduct] = useState(true)
   const [workCenters, setWorkCenters] = useState([])
@@ -179,11 +192,16 @@ export function ProductBom() {
   const [editingOperation, setEditingOperation] = useState(null)
   const [detailTab, setDetailTab] = useState('plan')
   const [zoomKind, setZoomKind] = useState(null)
+  const [fit2d, setFit2d] = useState(0)
+  const [fit3d, setFit3d] = useState(0)
+  const [fitDialog, setFitDialog] = useState(0)
   const [bulk, setBulk] = useState(null)
   const [bulkOps, setBulkOps] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [bomQuery, setBomQuery] = useState('')
+  const [versionOpen, setVersionOpen] = useState(false)
+  const [versions, setVersions] = useState([])
   const fileCache = useRef(new Map())
   const fileJobs = useRef(new Map())
   const operationTools = useTableTools(operations, ['operation_number', 'operation_name', 'operation_type', 'work_center_name', 'machine_name'])
@@ -193,6 +211,11 @@ export function ProductBom() {
 
   useEffect(() => {
     let active = true
+    setHierarchy(null)
+    setSelectedPart(null)
+    setShowProduct(true)
+    setOperations([])
+    setDocuments([])
     productsService.getHierarchy(id).then((data) => {
       if (active) setHierarchy(data)
     }).catch((error) => {
@@ -202,6 +225,24 @@ export function ProductBom() {
       active = false
     }
   }, [id])
+
+  useEffect(() => {
+    const number = hierarchy?.product_number
+    if (!number) return undefined
+    let active = true
+    productsService.getAll().then((data) => {
+      if (!active) return
+      const items = (Array.isArray(data) ? data : data?.items || [])
+        .filter((product) => product.product_number === number)
+        .sort((left, right) => String(left.version || '').localeCompare(String(right.version || ''), undefined, { numeric: true }))
+      setVersions(items)
+    }).catch(() => {
+      if (active) setVersions([])
+    })
+    return () => {
+      active = false
+    }
+  }, [hierarchy?.product_number, hierarchy?.id])
 
   const loadFile = (documentId) => {
     if (fileCache.current.has(documentId)) return Promise.resolve(fileCache.current.get(documentId))
@@ -331,18 +372,23 @@ export function ProductBom() {
   }
 
   const openDocumentDialog = (document = null) => {
-    setDocumentRows([document ? {
+    const revision = nextRevision(documents.map((item) => item.version))
+    const currentType = document?.document_type || '2d'
+    const knownType = currentType === '2d' || currentType === '3d'
+    setDocumentRows(document ? [{
       file: null,
       fileName: document.file_name,
-      document_type: document.document_type || '2d',
+      document_type: knownType ? currentType : 'custom',
+      customType: knownType ? '' : currentType,
+      showType: !knownType,
       version: document.version || '00',
       inputKey: Date.now(),
-    } : ['2d', '3d'].map((documentType, index) => ({
+    }] : ['2d', '3d', 'custom'].map((documentType, index) => ({
       ...emptyDocument(),
       document_type: documentType,
-      version: nextRevision(documents.map((item) => item.version)),
+      version: revision,
       inputKey: index + 1,
-    }))])
+    })))
     setDialog({ type: 'document', editing: document })
   }
 
@@ -472,9 +518,13 @@ export function ProductBom() {
     try {
       if (dialog.editing) {
         const row = documentRows[0]
+        if (row.document_type === 'custom' && !documentTypeName(row)) {
+          toast.error('Enter a custom doc type')
+          return
+        }
         const saved = await documentsService.updateDocument(dialog.editing.id, {
           file_name: row.fileName,
-          document_type: row.document_type,
+          document_type: documentTypeName(row),
           version: row.version,
         })
         const next = documents.map((document) => (document.id === saved.id ? { ...document, ...saved } : document))
@@ -483,7 +533,11 @@ export function ProductBom() {
       } else {
         const chosen = documentRows.filter((row) => row.file)
         if (!chosen.length) {
-          toast.error('Choose a 2D or 3D file')
+          toast.error('Choose a 2D, 3D, or custom file')
+          return
+        }
+        if (chosen.some((row) => row.document_type === 'custom' && !documentTypeName(row))) {
+          toast.error('Enter a custom doc type')
           return
         }
         const taken = new Set(documents.map((document) => document.file_name.trim().toLowerCase()))
@@ -500,7 +554,7 @@ export function ProductBom() {
           created.push(await documentsService.uploadDocument({
             partId: selectedPart.id,
             file: row.file,
-            documentType: row.document_type,
+            documentType: documentTypeName(row),
             version: row.version,
           }))
         }
@@ -709,8 +763,22 @@ export function ProductBom() {
             <span className="block truncate font-semibold">{hierarchy.product_name}</span>
             <span className="block truncate text-xs text-muted-foreground">{hierarchy.product_number}</span>
           </button>
+          <select
+            aria-label="Version"
+            className="h-7 shrink-0 border border-input bg-background px-1 text-xs"
+            value={String(hierarchy.id)}
+            onChange={(event) => {
+              const next = event.target.value
+              if (next && next !== String(hierarchy.id)) navigate(`/products/${next}`)
+            }}
+          >
+            {(versions.length ? versions : [{ id: hierarchy.id, version: hierarchy.version || '1' }]).map((item) => (
+              <option key={item.id} value={item.id}>v{item.version || '1'}</option>
+            ))}
+          </select>
           <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">Product</span>
           <NodeMenu>
+            {isAdmin && isFirstVersion(hierarchy.version) && <DropdownMenuItem onClick={() => setVersionOpen(true)}><Copy className="mr-2 h-4 w-4" />Create version</DropdownMenuItem>}
             <DropdownMenuItem onClick={() => openAssemblyDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Assembly</DropdownMenuItem>
             <DropdownMenuItem onClick={() => openPartDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Part</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setBulk({ assemblyId: null, title: hierarchy.product_name })}><Upload className="mr-2 h-4 w-4" />Upload Parts</DropdownMenuItem>
@@ -763,10 +831,11 @@ export function ProductBom() {
                     ))}
                   </select>
                   <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc2dId} onClick={() => setZoomKind('2d')}>Zoom</button>
+                  <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc2dId} onClick={() => setFit2d((value) => value + 1)}>Fit</button>
                 </div>
                 <div className="relative min-h-0 flex-1">
                   <div className="absolute inset-0">
-                    <PartPreview key={`2d-${doc2dId || 'none'}`} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.id === doc2dId ? file2d.data : null} />
+                    <PartPreview key={`2d-${doc2dId || 'none'}`} fitSignal={fit2d} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.id === doc2dId ? file2d.data : null} />
                   </div>
                 </div>
               </div>
@@ -780,10 +849,11 @@ export function ProductBom() {
                     ))}
                   </select>
                   <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc3dId} onClick={() => setZoomKind('3d')}>Zoom</button>
+                  <button type="button" className="border border-border px-2 py-1 text-xs font-bold" disabled={!doc3dId} onClick={() => setFit3d((value) => value + 1)}>Fit</button>
                 </div>
                 <div className="relative min-h-0 flex-1">
                   <div className="absolute inset-0">
-                    <PartPreview key={`3d-${doc3dId || 'none'}`} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.id === doc3dId ? file3d.data : null} />
+                    <PartPreview key={`3d-${doc3dId || 'none'}`} fitSignal={fit3d} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.id === doc3dId ? file3d.data : null} />
                   </div>
                 </div>
               </div>
@@ -879,11 +949,12 @@ export function ProductBom() {
                     <TableRow><TableCell colSpan={5}>No documents yet</TableCell></TableRow>
                   ) : documentPage.rows.map((document) => (
                     <TableRow key={document.id} className="cursor-pointer" onClick={() => {
-                      if (previewKind(document) === '3d') setDoc3dId(document.id)
-                      else setDoc2dId(document.id)
+                      const kind = previewKind(document)
+                      if (kind === '3d') setDoc3dId(document.id)
+                      else if (kind === '2d') setDoc2dId(document.id)
                     }}>
                       <TableCell>{document.file_name}</TableCell>
-                      <TableCell className="uppercase">{document.document_type}</TableCell>
+                      <TableCell>{document.document_type === '2d' ? '2D' : document.document_type === '3d' ? '3D' : document.document_type}</TableCell>
                       <TableCell>{document.version}</TableCell>
                       <TableCell className="uppercase">{document.file_type}</TableCell>
                       <TableCell onClick={(event) => event.stopPropagation()}>
@@ -900,6 +971,13 @@ export function ProductBom() {
           </>
         )}
       </section>
+
+      <ProductVersionDialog
+        open={versionOpen}
+        hierarchy={hierarchy}
+        onOpenChange={setVersionOpen}
+        onCreated={(created) => navigate(`/products/${created.id}`)}
+      />
 
       <BulkPartsDialog
         open={Boolean(bulk)}
@@ -936,11 +1014,14 @@ export function ProductBom() {
       <Dialog open={Boolean(zoomKind)} onOpenChange={(open) => !open && setZoomKind(null)}>
         <DialogContent className="h-[90vh] max-w-6xl">
           <DialogHeader>
-            <DialogTitle>{selectedPart?.part_name} · {zoomKind === '3d' ? '3D' : '2D'}</DialogTitle>
+            <div className="flex items-center justify-between gap-3 pr-8">
+              <DialogTitle>{selectedPart?.part_name} · {zoomKind === '3d' ? '3D' : '2D'}</DialogTitle>
+              <button type="button" className="border border-border px-2 py-1 text-xs font-bold" onClick={() => setFitDialog((value) => value + 1)}>Fit</button>
+            </div>
           </DialogHeader>
           <div className="h-[calc(90vh-7rem)] min-h-0">
-            {zoomKind === '2d' && <PartPreview key={`zoom-2d-${doc2dId || 'none'}`} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.data} />}
-            {zoomKind === '3d' && <PartPreview key={`zoom-3d-${doc3dId || 'none'}`} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.data} />}
+            {zoomKind === '2d' && <PartPreview key={`zoom-2d-${doc2dId || 'none'}`} fitSignal={fitDialog} fileType={document2d?.file_type} fileName={document2d?.file_name} data={file2d.data} />}
+            {zoomKind === '3d' && <PartPreview key={`zoom-3d-${doc3dId || 'none'}`} fitSignal={fitDialog} fileType={document3d?.file_type} fileName={document3d?.file_name} data={file3d.data} />}
           </div>
         </DialogContent>
       </Dialog>
@@ -1056,7 +1137,7 @@ export function ProductBom() {
       </Dialog>
 
       <Dialog open={dialog?.type === 'document'} onOpenChange={(open) => !open && setDialog(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader><DialogTitle>{dialog?.editing ? 'Edit Part Document' : 'Upload Part Document'}</DialogTitle></DialogHeader>
           <form onSubmit={saveDocuments} className="space-y-3" autoComplete="off">
             {dialog?.editing ? documentRows.map((row, index) => (
@@ -1068,9 +1149,10 @@ export function ProductBom() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label>Type</Label>
-                    <select className={fieldClass} value={row.document_type} onChange={(event) => updateRow(setDocumentRows, index, { document_type: event.target.value })}>
+                    <select className={fieldClass} value={row.document_type} onChange={(event) => updateRow(setDocumentRows, index, { document_type: event.target.value, showType: event.target.value === 'custom' })}>
                       <option value="2d">2D</option>
                       <option value="3d">3D</option>
+                      <option value="custom">Custom</option>
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -1078,29 +1160,63 @@ export function ProductBom() {
                     <Input value={row.version} readOnly />
                   </div>
                 </div>
+                {row.document_type === 'custom' && (
+                  <div className="space-y-1">
+                    <Label>Custom doc type</Label>
+                    <Input value={row.customType} maxLength={50} placeholder="e.g. CNC program, MPP" onChange={(event) => updateRow(setDocumentRows, index, { customType: event.target.value })} required />
+                  </div>
+                )}
               </div>
             )) : (
-              <div className="grid grid-cols-2 gap-3">
-                {documentRows.map((row, index) => (
+              <>
+              <div className="grid grid-cols-3 gap-3">
+                {documentRows.map((row, index) => {
+                  const kind = row.document_type
+                  const allowed = kind === '3d' ? ['stl', 'step', 'stp'] : kind === '2d' ? ['pdf', 'png', 'jpg', 'jpeg'] : null
+                  return (
                   <FileDrop
-                    key={row.document_type}
-                    label={row.document_type === '3d' ? '3D' : '2D'}
-                    accept={row.document_type === '3d' ? '.stl,.step,.stp' : '.pdf,.png,.jpg,.jpeg'}
+                    key={kind}
+                    label={kind === '3d' ? '3D' : kind === 'custom' ? '...' : '2D'}
+                    subtitle={kind === '3d' ? '3D Model' : kind === 'custom' ? 'Custom Type' : '2D Drawing'}
+                    hint={kind === '3d' ? 'STL, STEP, STP' : kind === '2d' ? 'PDF, PNG, JPG' : 'Other files'}
+                    accept={kind === '3d' ? '.stl,.step,.stp' : kind === '2d' ? '.pdf,.png,.jpg,.jpeg' : undefined}
+                    active={kind === 'custom' ? row.showType || Boolean(row.file) : Boolean(row.file)}
                     fileName={row.fileName}
+                    onActivate={kind === 'custom' ? () => updateRow(setDocumentRows, index, { showType: true }) : undefined}
                     onFile={(file) => {
                       if (file) {
                         const extension = file.name.split('.').pop()?.toLowerCase()
-                        const allowed = row.document_type === '3d' ? ['stl', 'step', 'stp'] : ['pdf', 'png', 'jpg', 'jpeg']
-                        if (!allowed.includes(extension)) {
-                          toast.error(row.document_type === '3d' ? 'Choose an STL or STEP file' : 'Choose a PDF or image file')
+                        if (BLOCKED_UPLOADS.includes(extension)) {
+                          toast.error('This file type cannot be uploaded')
+                          return
+                        }
+                        if (allowed && !allowed.includes(extension)) {
+                          toast.error(kind === '3d' ? '3D accepts STL, STEP, or STP only' : '2D accepts PDF, PNG, or JPG only')
                           return
                         }
                       }
-                      updateRow(setDocumentRows, index, { file, fileName: file?.name || '', inputKey: Date.now() })
+                      updateRow(setDocumentRows, index, { file, fileName: file?.name || '', showType: kind === 'custom' || row.showType, inputKey: Date.now() })
                     }}
                   />
-                ))}
+                  )
+                })}
               </div>
+              {documentRows.some((row) => row.document_type === 'custom' && row.showType) && (
+                <div className="space-y-1">
+                  <Label>Custom doc type</Label>
+                  <Input
+                    autoFocus
+                    maxLength={50}
+                    placeholder="e.g. CNC program, MPP"
+                    value={documentRows.find((row) => row.document_type === 'custom')?.customType || ''}
+                    onChange={(event) => {
+                      const index = documentRows.findIndex((row) => row.document_type === 'custom')
+                      updateRow(setDocumentRows, index, { customType: event.target.value })
+                    }}
+                  />
+                </div>
+              )}
+              </>
             )}
             <DialogFooter><Button type="submit">{dialog?.editing ? 'Save' : 'Upload'}</Button></DialogFooter>
           </form>
@@ -1130,7 +1246,7 @@ export function ProductBom() {
   )
 }
 
-function FileDrop({ label, accept, fileName, onFile }) {
+function FileDrop({ label, subtitle, hint, accept, fileName, active, onActivate, onFile }) {
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)
   const take = (fileList) => {
@@ -1139,7 +1255,11 @@ function FileDrop({ label, accept, fileName, onFile }) {
   }
   return (
     <div
-      className={`flex min-h-36 flex-col items-center justify-center gap-2 border border-dashed px-3 py-4 text-center ${over ? 'bg-accent' : ''}`}
+      className={`flex min-h-36 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-4 text-center ${active ? 'border-primary bg-primary/5' : ''} ${over ? 'bg-accent' : ''}`}
+      onClick={() => onActivate?.()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onActivate?.()
+      }}
       onDragOver={(event) => {
         event.preventDefault()
         setOver(true)
@@ -1148,16 +1268,24 @@ function FileDrop({ label, accept, fileName, onFile }) {
       onDrop={(event) => {
         event.preventDefault()
         setOver(false)
+        onActivate?.()
         take(event.dataTransfer.files)
       }}
     >
-      <span className="text-sm font-bold">{label}</span>
-      <span className="text-xs text-muted-foreground">{fileName || 'Drag and drop a file here'}</span>
-      <Button type="button" variant="outline" className="h-8" onClick={() => inputRef.current?.click()}>Choose file</Button>
-      {fileName && <Button type="button" variant="ghost" className="h-7" onClick={() => onFile(null)}>Clear</Button>}
+      <span className={`text-lg font-bold ${active ? 'text-primary' : 'text-muted-foreground'}`}>{label}</span>
+      {subtitle && <span className="text-sm text-muted-foreground">{subtitle}</span>}
+      <span className="text-xs text-muted-foreground">{fileName || 'drop file here'}</span>
+      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+      <Button type="button" variant="outline" className="mt-1 h-8" onClick={(event) => { event.stopPropagation(); onActivate?.(); inputRef.current?.click() }}>Choose file</Button>
+      {fileName && <Button type="button" variant="ghost" className="h-7" onClick={(event) => { event.stopPropagation(); onFile(null) }}>Clear</Button>}
       <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(event) => { take(event.target.files); event.target.value = '' }} />
     </div>
   )
+}
+
+function documentTypeName(row) {
+  if (row.document_type !== 'custom') return row.document_type
+  return String(row.customType || '').trim().replace(/\s+/g, ' ').slice(0, 50)
 }
 
 function updateRow(setter, index, patch) {

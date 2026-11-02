@@ -80,7 +80,7 @@ function placeInView(geometries) {
   return geometries
 }
 
-function FittedModel({ geometries, theme }) {
+function FittedModel({ geometries, theme, fitSignal }) {
   const group = useRef(null)
   const camera = useThree((state) => state.camera)
   const controls = useThree((state) => state.controls)
@@ -112,7 +112,7 @@ function FittedModel({ geometries, theme }) {
       controls.target.set(0, 0, 0)
       controls.update()
     }
-  }, [geometries, camera, controls, view.width, view.height])
+  }, [geometries, camera, controls, view.width, view.height, fitSignal])
 
   const floor = useMemo(() => {
     const box = new THREE.Box3()
@@ -152,7 +152,7 @@ function FittedModel({ geometries, theme }) {
   )
 }
 
-function ModelCanvas({ geometries, theme }) {
+function ModelCanvas({ geometries, theme, fitSignal }) {
   const dark = theme === 'dark'
   return (
     <Canvas
@@ -163,7 +163,7 @@ function ModelCanvas({ geometries, theme }) {
       <color attach="background" args={[dark ? '#18181b' : '#ffffff']} />
       <ambientLight intensity={0.85} />
       <directionalLight position={[6, 8, 4]} intensity={1.4} />
-      <FittedModel geometries={geometries} theme={theme} />
+      <FittedModel geometries={geometries} theme={theme} fitSignal={fitSignal} />
       <OrbitControls makeDefault />
     </Canvas>
   )
@@ -177,7 +177,7 @@ function previewSurface(theme) {
   return `${shared} bg-white bg-[linear-gradient(to_right,#00488333_1px,transparent_1px),linear-gradient(to_bottom,#00488333_1px,transparent_1px)] text-[#18181b]`
 }
 
-export function PartPreview({ fileType, fileName, data }) {
+export function PartPreview({ fileType, fileName, data, fitSignal = 0 }) {
   const { theme } = useTheme()
   const surface = previewSurface(theme)
   const canvasRef = useRef(null)
@@ -195,6 +195,11 @@ export function PartPreview({ fileType, fileName, data }) {
 
   const kind = (fileType || fileName?.split('.').pop() || '').toLowerCase()
   const bytes = useMemo(() => (data ? data.slice(0) : null), [data])
+
+  useEffect(() => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }, [fitSignal])
 
   useEffect(() => {
     let cancelled = false
@@ -389,7 +394,7 @@ export function PartPreview({ fileType, fileName, data }) {
   if (kind === 'stl' || kind === 'step' || kind === 'stp') {
     return (
       <div className="relative h-full w-full">
-        {geometries.length > 0 ? <ModelCanvas geometries={geometries} theme={theme} /> : (
+        {geometries.length > 0 ? <ModelCanvas geometries={geometries} theme={theme} fitSignal={fitSignal} /> : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No 3D geometry in this file</div>
         )}
       </div>

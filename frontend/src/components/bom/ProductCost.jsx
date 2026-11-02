@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Download, FileText, History, Loader2, Trash2 } from 'lucide-react'
+import * as pdfjs from 'pdfjs-dist'
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+
+pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
+import { Hint } from '../ui/tooltip'
 import { RowActions } from '../common/RowActions'
 import { TableSearch, useTableTools } from '../common/TableTools'
 import { TablePager } from '../common/TablePager'
@@ -12,8 +17,59 @@ import { customersService } from '../../services/api/customers'
 import { downloadCostExcel, downloadCostPdf, scaleCostSummary } from './productCostExport'
 import { useConfirm } from '../common/ConfirmDialog'
 
+const HISTORY_PAGE_SIZE = 9
+
 function money(value) {
   return Number(value || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
+}
+
+function timeAgo(value) {
+  if (!value) return ''
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
+
+function ReportThumb({ bytes }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !bytes) return undefined
+    let cancelled = false
+    let task
+    const draw = async () => {
+      task = pdfjs.getDocument({ data: bytes.slice(0) })
+      const pdf = await task.promise
+      if (cancelled) return
+      const page = await pdf.getPage(1)
+      const base = page.getViewport({ scale: 1 })
+      const scale = Math.min(420 / base.width, 280 / base.height)
+      const viewport = page.getViewport({ scale })
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    }
+    draw().catch(() => {})
+    return () => {
+      cancelled = true
+      try {
+        if (typeof task?.destroy === 'function') task.destroy()
+      } catch {
+        // The preview can close while the PDF is still opening.
+      }
+    }
+  }, [bytes])
+
+  if (!bytes) return <div className="h-full w-full animate-pulse bg-muted" />
+  return (
+    <div className="flex h-full w-full items-start justify-center overflow-hidden bg-white">
+      <canvas ref={canvasRef} className="max-h-full max-w-full" />
+    </div>
+  )
 }
 
 const cards = [
@@ -36,6 +92,13 @@ export function ProductCost({ productId }) {
   const [customers, setCustomers] = useState([])
   const [customerId, setCustomerId] = useState('')
   const [exportQty, setExportQty] = useState('1')
+  const [exporting, setExporting] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [thumbs, setThumbs] = useState({})
+  const [preview, setPreview] = useState(null)
   const scrollerRef = useRef(null)
   const tools = useTableTools(summary?.operations || [], ['machine_name', 'part_name', 'part_number', 'operation_name', 'operation_number'])
   const costTools = useTableTools(summary?.additional_costs || [], ['cost_name', 'cost_value'])
@@ -47,6 +110,13 @@ export function ProductCost({ productId }) {
   }
 
   useEffect(() => {
+    setShowHistory(false)
+    setHistory([])
+    setThumbs({})
+    setPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url)
+      return null
+    })
     load().catch((error) => toast.error(error.response?.data?.detail || 'Failed to load product cost'))
   }, [productId])
 
@@ -83,13 +153,104 @@ export function ProductCost({ productId }) {
       toast.error('Enter a quantity of 1 or more')
       return
     }
+    setExporting(kind)
     try {
       const scaled = scaleCostSummary(summary, qty)
-      if (kind === 'pdf') await downloadCostPdf(scaled, customer)
-      else await downloadCostExcel(scaled, customer)
+      if (kind === 'pdf') {
+        const file = await downloadCostPdf(scaled, customer)
+        if (file?.blob) {
+          try {
+            await productsService.saveCostHistory(productId, file, {
+              customerName: customer.company_name,
+              quantity: qty,
+              grandTotal: scaled.grand_total,
+            })
+          } catch (error) {
+            toast.error(error.response?.data?.detail || 'The PDF downloaded, but it was not saved to history')
+          }
+        }
+      } else await downloadCostExcel(scaled, customer)
       setExportOpen(false)
     } catch (error) {
       toast.error(error.response?.data?.detail || error.message || 'Failed to download report')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  const openHistory = async () => {
+    if (showHistory) {
+      setShowHistory(false)
+      return
+    }
+    setShowHistory(true)
+    setHistoryPage(1)
+    setHistoryLoading(true)
+    try {
+      setHistory(await productsService.listCostHistory(productId))
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to load report history')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const historyPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE))
+  const historyCurrent = Math.min(historyPage, historyPages)
+  const historyRows = history.slice((historyCurrent - 1) * HISTORY_PAGE_SIZE, historyCurrent * HISTORY_PAGE_SIZE)
+
+  useEffect(() => {
+    if (!showHistory) return undefined
+    let cancelled = false
+    historyRows.forEach((item) => {
+      if (thumbs[item.id]) return
+      productsService.downloadCostHistory(productId, item.id).then(async (blob) => {
+        const bytes = new Uint8Array(await blob.arrayBuffer())
+        if (!cancelled) setThumbs((current) => (current[item.id] ? current : { ...current, [item.id]: bytes }))
+      }).catch(() => {})
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [showHistory, productId, historyCurrent, history])
+
+  const openSavedReport = async (item) => {
+    try {
+      const bytes = thumbs[item.id] || new Uint8Array(await (await productsService.downloadCostHistory(productId, item.id)).arrayBuffer())
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+      setPreview((current) => {
+        if (current?.url) URL.revokeObjectURL(current.url)
+        return { item, url }
+      })
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to open the saved report')
+    }
+  }
+
+  const closePreview = () => {
+    setPreview((current) => {
+      if (current?.url) URL.revokeObjectURL(current.url)
+      return null
+    })
+  }
+
+  const removeHistory = async (item) => {
+    if (!(await confirm({ title: 'Delete report', description: `Delete ${item.file_name}? This cannot be undone.` }))) return
+    try {
+      await productsService.deleteCostHistory(productId, item.id)
+      setHistory((rows) => rows.filter((row) => row.id !== item.id))
+      setThumbs((current) => {
+        const next = { ...current }
+        delete next[item.id]
+        return next
+      })
+      setPreview((current) => {
+        if (current?.item?.id !== item.id) return current
+        if (current.url) URL.revokeObjectURL(current.url)
+        return null
+      })
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete the saved report')
     }
   }
 
@@ -138,12 +299,67 @@ export function ProductCost({ productId }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
         <h2 className="min-w-0 truncate font-heading text-lg font-bold">{summary.product_name}</h2>
-        <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center border border-border" aria-label="Export" title="Export" onClick={openExport}>
-          <Download className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {showHistory && (
+            <Hint label="Back">
+              <button type="button" className="flex h-8 w-8 items-center justify-center border border-border" aria-label="Back" onClick={() => setShowHistory(false)}>
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            </Hint>
+          )}
+          <Hint label="History">
+            <button type="button" className={`flex h-8 w-8 items-center justify-center border border-border ${showHistory ? 'bg-primary text-primary-foreground' : ''}`} aria-label="History" onClick={openHistory}>
+              <History className="h-4 w-4" />
+            </button>
+          </Hint>
+          <Hint label="Download">
+            <button type="button" className="flex h-8 w-8 items-center justify-center border border-border" aria-label="Download" onClick={openExport}>
+              <Download className="h-4 w-4" />
+            </button>
+          </Hint>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
+      {showHistory ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {historyLoading ? (
+            <p className="text-sm text-muted-foreground">Loading saved reports...</p>
+          ) : history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No saved reports for this version yet. Download a PDF to save one.</p>
+          ) : (
+            <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-3 gap-3 overflow-auto">
+              {historyRows.map((item) => (
+                <div key={item.id} className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-background text-left">
+                  <button type="button" className="min-h-0 flex-1 overflow-hidden bg-muted p-2 text-left" onClick={() => openSavedReport(item)}>
+                    <div className="h-full overflow-hidden border border-border bg-white">
+                      <ReportThumb bytes={thumbs[item.id]} />
+                    </div>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2">
+                    <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => openSavedReport(item)}>
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground">
+                        <FileText className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{item.file_name}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{item.customer_name} · Qty {item.quantity} · {money(item.grand_total)} · {timeAgo(item.created_at)}</span>
+                      </span>
+                    </button>
+                    <Hint label="Delete">
+                      <button type="button" className="rounded p-1 hover:bg-accent" aria-label="Delete" onClick={() => removeHistory(item)}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </Hint>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <TablePager page={historyCurrent} pages={historyPages} total={history.length} onPage={setHistoryPage} />
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-5 gap-2">
         {cards.map(([label, key, isMoney]) => (
           <div key={key} className="min-w-0 border border-border px-3 py-2">
@@ -285,6 +501,18 @@ export function ProductCost({ productId }) {
           </div>
         )}
       </div>
+      </>
+      )}
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => { if (!open) closePreview() }}>
+        <DialogContent className="flex h-[85vh] max-h-[85vh] w-[min(56rem,92vw)] max-w-none flex-col gap-3 overflow-hidden">
+          <DialogHeader className="shrink-0 pr-6">
+            <DialogTitle>{preview?.item.customer_name}</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-white">
+            {preview?.url && <iframe title={preview.item.file_name} src={preview.url} className="h-full w-full" />}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -313,8 +541,14 @@ export function ProductCost({ productId }) {
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => exportReport('excel')}>Download Excel</Button>
-            <Button type="button" onClick={() => exportReport('pdf')}>Download PDF</Button>
+            <Button type="button" variant="outline" disabled={Boolean(exporting)} onClick={() => exportReport('excel')}>
+              {exporting === 'excel' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Download Excel
+            </Button>
+            <Button type="button" disabled={Boolean(exporting)} onClick={() => exportReport('pdf')}>
+              {exporting === 'pdf' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Download PDF
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

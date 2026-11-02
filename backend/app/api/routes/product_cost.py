@@ -1,8 +1,12 @@
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import io
+import re
+import uuid
 
 from app.database.session import get_db
 from app.models.user import User
@@ -11,6 +15,8 @@ from app.models.part import Part
 from app.models.operation import Operation
 from app.models.machine import Machine
 from app.models.product_additional_cost import ProductAdditionalCost
+from app.models.cost_report_history import CostReportHistory
+from app.storage.minio_service import minio_service
 from app.core.dependencies import get_current_user
 from app.core.time_utils import time_to_hours, hours_to_clock
 from app.services.custom_fields import entries_for_entity
@@ -232,3 +238,135 @@ def delete_additional_cost(
     db.delete(row)
     db.commit()
     return build_summary(db, product)
+
+
+class CostHistoryItem(BaseModel):
+    id: int
+    customer_name: str
+    quantity: int
+    grand_total: float
+    file_name: str
+    created_at: str
+
+
+def _safe_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", (value or "").strip())
+    return cleaned or "cost-report.pdf"
+
+
+@router.get("/{product_id}/cost-history", response_model=List[CostHistoryItem])
+def list_cost_history(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _product_or_404(db, product_id)
+    rows = db.query(CostReportHistory).filter(
+        CostReportHistory.product_id == product_id
+    ).order_by(CostReportHistory.id.desc()).all()
+    return [
+        CostHistoryItem(
+            id=row.id,
+            customer_name=row.customer_name,
+            quantity=int(row.quantity),
+            grand_total=float(row.grand_total or 0),
+            file_name=row.file_name,
+            created_at=row.created_at.isoformat() if row.created_at else "",
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{product_id}/cost-history", response_model=CostHistoryItem, status_code=status.HTTP_201_CREATED)
+def save_cost_history(
+    product_id: int,
+    file: UploadFile = File(...),
+    customer_name: str = Form(...),
+    quantity: int = Form(...),
+    grand_total: float = Form(0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    product = _product_or_404(db, product_id)
+    name = _safe_name(file.filename or "cost-report.pdf")
+    if not name.lower().endswith(".pdf"):
+        name = f"{name}.pdf"
+    object_name = f"cost-history/{product.id}/{uuid.uuid4().hex}-{name}"
+    content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The report file is empty")
+    try:
+        minio_service.upload_file(
+            file_data=io.BytesIO(content),
+            original_filename=name,
+            content_type="application/pdf",
+            object_name=object_name,
+        )
+    except Exception as error:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to store the report") from error
+    row = CostReportHistory(
+        product_id=product.id,
+        customer_name=customer_name.strip() or "Customer",
+        quantity=max(1, int(quantity)),
+        grand_total=grand_total,
+        file_name=name,
+        file_path=object_name,
+        created_by=current_user.id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return CostHistoryItem(
+        id=row.id,
+        customer_name=row.customer_name,
+        quantity=int(row.quantity),
+        grand_total=float(row.grand_total or 0),
+        file_name=row.file_name,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+    )
+
+
+@router.get("/{product_id}/cost-history/{history_id}/file")
+def download_cost_history(
+    product_id: int,
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    row = db.query(CostReportHistory).filter(
+        CostReportHistory.id == history_id,
+        CostReportHistory.product_id == product_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved report not found")
+    try:
+        content = minio_service.download_file(row.file_path)
+    except Exception as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved report file is missing") from error
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{row.file_name}"'},
+    )
+
+
+@router.delete("/{product_id}/cost-history/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cost_history(
+    product_id: int,
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    row = db.query(CostReportHistory).filter(
+        CostReportHistory.id == history_id,
+        CostReportHistory.product_id == product_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved report not found")
+    try:
+        minio_service.delete_file(row.file_path)
+    except Exception:
+        pass
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

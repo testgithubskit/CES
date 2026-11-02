@@ -14,6 +14,8 @@ from app.core.rbac import require_admin
 from app.models.user import User
 from app.schemas.listing import RecordList
 from app.services.custom_fields import apply_values, catalog, entries_for_entity, pop_custom, with_fields, with_fields_many
+from app.services.product_version import create_product_version
+from app.storage.minio_service import minio_service
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
 
@@ -81,6 +83,11 @@ class CustomFieldEntry(BaseModel):
     key: str
     label: str
     value: str = ""
+
+
+class ProductVersionCreate(BaseModel):
+    part_ids: List[int] = []
+    version: str
 
 
 class ProductHierarchy(BaseModel):
@@ -212,6 +219,14 @@ def delete_product(
         )
     
     from app.services.bom_delete import delete_assembly_tree, delete_part_tree
+    from app.models.cost_report_history import CostReportHistory
+
+    for saved in db.query(CostReportHistory).filter(CostReportHistory.product_id == product_id).all():
+        try:
+            minio_service.delete_file(saved.file_path)
+        except Exception:
+            pass
+        db.delete(saved)
 
     direct_parts = db.query(Part).filter(
         Part.product_id == product_id,
@@ -230,6 +245,34 @@ def delete_product(
     db.delete(product)
     db.commit()
     return None
+
+
+@router.post("/{product_id}/version", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+def create_version(
+    product_id: int,
+    body: ProductVersionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Create the next version of a product from the selected parts.
+    Copied documents keep their revision and are stored as new files.
+    """
+    db.info["copied_files"] = []
+    try:
+        created = create_product_version(db, product_id, body.part_ids, body.version, current_user.id)
+        db.commit()
+        db.refresh(created)
+        return _product_response(db, created)
+    except Exception:
+        copied = list(db.info.get("copied_files") or [])
+        db.rollback()
+        for object_name in copied:
+            try:
+                minio_service.delete_file(object_name)
+            except Exception:
+                pass
+        raise
 
 
 @router.get("/{product_id}/hierarchy", response_model=ProductHierarchy)

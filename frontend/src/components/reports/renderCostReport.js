@@ -75,19 +75,21 @@ export function buildCostReportHtml(summary, customer, template) {
   const page = { ...DEFAULT_PAGE_SETTINGS, ...data, margins: { ...DEFAULT_PAGE_SETTINGS.margins, ...(data.margins || {}) } }
   const map = values(summary, customer)
   const margins = page.margins
+  const footerReserve = Math.max(Number(page.footerSpacing) || 0, Number(margins.bottom) || 0, 20)
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(summary.product_number || 'Cost report')}</title>
 <style>
-  @page { size: ${page.pageSize} ${page.orientation}; margin: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm; }
+  @page { size: ${page.pageSize} ${page.orientation}; margin: ${margins.top}mm ${margins.right}mm ${footerReserve}mm ${margins.left}mm; }
   * { box-sizing: border-box; }
   body { margin: 0; color: #111; font-family: ${page.fontFamily}, Times, serif; font-size: ${page.fontSize}; line-height: 1.35; }
   table { width: 100%; border-collapse: collapse; margin: 8px 0; }
   th, td { border: 1px solid #111; padding: 3px 6px; text-align: left; vertical-align: top; }
   th { background: #f3f4f6; }
   p { margin: 0.3em 0; }
+  .report-footer { position: fixed; left: ${margins.left}mm; right: ${margins.right}mm; bottom: 0; }
 </style></head><body>
-${fill(data.headerHtml, map)}
-<div style="margin-top:8px;margin-bottom:8px">${fill(data.bodyHtml, map)}</div>
-${fill(data.footerHtml, map)}
+<header class="report-header">${fill(data.headerHtml, map)}</header>
+<main class="report-body">${fill(data.bodyHtml, map)}</main>
+<footer class="report-footer">${fill(data.footerHtml, map)}</footer>
 </body></html>`
 }
 
@@ -104,10 +106,9 @@ function printHtml(html, title) {
   }, 300)
 }
 
-export async function downloadTemplatedCostPdf(summary, customer, template) {
+export async function downloadTemplatedCostPdf(summary, customer, template, filename = `${summary.product_number || 'cost'}-${customer?.company_name || 'customer'}-cost-summary.pdf`) {
   const html = buildCostReportHtml(summary, customer, template)
   const data = template?.template_data || {}
-  const filename = `${summary.product_number || 'cost'}-report.pdf`
   try {
     const response = await apiClient.post('/api/v1/reports/pdf', {
       html,
@@ -122,7 +123,9 @@ export async function downloadTemplatedCostPdf(summary, customer, template) {
     link.download = filename
     link.click()
     URL.revokeObjectURL(url)
+    return { blob, filename }
   } catch {
     printHtml(html, filename.replace(/\.pdf$/, ''))
+    return null
   }
 }

@@ -35,6 +35,7 @@ const builtinColumns = [
   { key: 'product_number', label: 'Product No' },
   { key: 'product_name', label: 'Product' },
   { key: 'quantity', label: 'Qty' },
+  { key: 'version', label: 'Version' },
   { key: 'description', label: 'Description' },
   { key: 'created_by_name', label: 'Created By' },
   { key: 'created_at', label: 'Created At' },

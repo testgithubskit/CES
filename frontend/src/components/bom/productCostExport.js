@@ -60,8 +60,10 @@ function summaryLines(summary) {
   ]
 }
 
-function fileBase(summary) {
-  return `${summary.product_number || summary.product_name}-cost-summary`.replace(/[^\w.-]+/g, '_')
+function fileBase(summary, customer) {
+  const product = summary.product_number || summary.product_name || 'cost'
+  const company = customer?.company_name || ''
+  return [product, company, 'cost-summary'].filter(Boolean).join('-').replace(/[^\w.-]+/g, '_')
 }
 
 function saveBlob(blob, filename) {
@@ -116,10 +118,7 @@ function customerLines(customer) {
 
 export async function downloadCostPdf(summary, customer) {
   const template = await getStarredTemplate().catch(() => null)
-  if (template) {
-    downloadTemplatedCostPdf(summary, customer, template)
-    return
-  }
+  if (template) return downloadTemplatedCostPdf(summary, customer, template, `${fileBase(summary, customer)}.pdf`)
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const width = doc.internal.pageSize.getWidth()
   const drawHeader = () => {
@@ -208,7 +207,10 @@ export async function downloadCostPdf(summary, customer) {
     margin: { left: 10, right: 10 },
     columnStyles: { 1: { halign: 'right' } },
   })
-  doc.save(`${fileBase(summary)}.pdf`)
+  const filename = `${fileBase(summary, customer)}.pdf`
+  const blob = doc.output('blob')
+  saveBlob(blob, filename)
+  return { blob, filename }
 }
 
 export async function downloadCostExcel(summary, customer) {
@@ -251,5 +253,5 @@ export async function downloadCostExcel(summary, customer) {
   sheet.getColumn(1).width = 28
   sheet.getColumn(2).width = 28
   const buffer = await workbook.xlsx.writeBuffer()
-  saveBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileBase(summary)}.xlsx`)
+  saveBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileBase(summary, customer)}.xlsx`)
 }

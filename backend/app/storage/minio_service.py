@@ -1,4 +1,5 @@
 from minio import Minio
+from minio.commonconfig import CopySource
 from minio.error import S3Error
 from app.core.config import settings
 from typing import Optional, BinaryIO
@@ -98,6 +99,20 @@ class MinIOService:
         except S3Error as e:
             raise Exception(f"Failed to download file: {e}")
     
+    def copy_file(self, source_name: str, dest_name: str) -> str:
+        """
+        Copy an object to a new path in the same bucket.
+        """
+        try:
+            self.client.copy_object(
+                self.bucket_name,
+                dest_name,
+                CopySource(self.bucket_name, source_name),
+            )
+            return dest_name
+        except S3Error as e:
+            raise Exception(f"Failed to copy file: {e}")
+
     def delete_file(self, object_name: str) -> bool:
         """
         Delete a file from MinIO.

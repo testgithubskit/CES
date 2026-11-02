@@ -46,6 +46,37 @@ export const productsService = {
     return response.data
   },
 
+  createVersion: async (id, partIds, version) => {
+    const response = await apiClient.post(`/api/v1/products/${id}/version`, { part_ids: partIds, version })
+    return response.data
+  },
+
+  listCostHistory: async (id) => {
+    const response = await apiClient.get(`/api/v1/products/${id}/cost-history`)
+    return response.data
+  },
+
+  saveCostHistory: async (id, file, details) => {
+    const form = new FormData()
+    form.append('file', file.blob, file.filename)
+    form.append('customer_name', details.customerName)
+    form.append('quantity', String(details.quantity))
+    form.append('grand_total', String(details.grandTotal || 0))
+    const response = await apiClient.post(`/api/v1/products/${id}/cost-history`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  downloadCostHistory: async (id, historyId) => {
+    const response = await apiClient.get(`/api/v1/products/${id}/cost-history/${historyId}/file`, { responseType: 'blob' })
+    return response.data
+  },
+
+  deleteCostHistory: async (id, historyId) => {
+    await apiClient.delete(`/api/v1/products/${id}/cost-history/${historyId}`)
+  },
+
   update: async (id, productData) => {
     const response = await apiClient.put(`/api/v1/products/${id}`, productData)
     return response.data

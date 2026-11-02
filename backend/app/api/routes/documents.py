@@ -16,6 +16,9 @@ router = APIRouter(prefix="/api/v1/documents", tags=["Documents"])
 
 EXTENSION_TYPES = {
     "pdf": "2d",
+    "png": "2d",
+    "jpg": "2d",
+    "jpeg": "2d",
     "stl": "3d",
     "step": "3d",
     "stp": "3d",
@@ -23,9 +26,16 @@ EXTENSION_TYPES = {
 
 CONTENT_TYPES = {
     "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
     "stl": "model/stl",
     "step": "application/step",
     "stp": "application/step",
+}
+
+BLOCKED_EXTENSIONS = {
+    "exe", "bat", "cmd", "com", "msi", "scr", "ps1", "vbs", "dll", "js", "jar",
 }
 
 
@@ -52,6 +62,10 @@ def _extension(filename: str) -> str:
     if "." not in filename:
         return ""
     return filename.rsplit(".", 1)[-1].lower()
+
+
+def _custom_type(value: str) -> str:
+    return " ".join((value or "").split())[:50]
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -108,18 +122,37 @@ def upload_document(
         )
 
     file_extension = _extension(file_name)
-    if file_extension not in EXTENSION_TYPES:
+    if not file_extension or len(file_extension) > 20:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Allowed files are PDF, STL, STEP, and STP"
+            detail="Choose a file with an extension"
+        )
+    if file_extension in BLOCKED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This file type cannot be uploaded"
         )
 
-    if document_type not in (None, "", "2d", "3d"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document type must be 2d or 3d"
-        )
-    resolved_type = document_type or EXTENSION_TYPES[file_extension]
+    requested = (document_type or "").strip()
+    if requested.lower() in ("", "2d", "3d"):
+        if file_extension not in EXTENSION_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Use Custom Type for files that are not 2D or 3D"
+            )
+        resolved_type = EXTENSION_TYPES[file_extension]
+        if requested and requested.lower() != resolved_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{file_extension.upper()} belongs in the {resolved_type.upper()} upload"
+            )
+    else:
+        resolved_type = _custom_type(requested)
+        if not resolved_type or resolved_type.lower() in ("2d", "3d"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Enter a custom doc type such as CNC program or MPP"
+            )
     version = _next_revision(db, part_id, assembly_id)
 
     file_content = file.file.read()
@@ -136,7 +169,7 @@ def upload_document(
         file_path = minio_service.upload_file(
             file_data=io.BytesIO(file_content),
             original_filename=file.filename,
-            content_type=file.content_type or CONTENT_TYPES[file_extension],
+            content_type=file.content_type or CONTENT_TYPES.get(file_extension, "application/octet-stream"),
             object_name=object_name
         )
     except Exception as e:

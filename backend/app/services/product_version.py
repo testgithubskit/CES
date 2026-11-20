@@ -18,18 +18,18 @@ def _safe(value: str) -> str:
     return cleaned or "file"
 
 
-def _is_first_version(value: str) -> bool:
-    text = str(value or "").strip().lower()
-    if text.startswith("v"):
-        text = text[1:].strip()
-    return text == "1"
-
-
 def _clean_version(value: str) -> str:
     text = " ".join(str(value or "").split())
     if not text or len(text) > 50:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Enter a version such as v2 or 1.1")
     return text
+
+
+def version_family_query(db: Session, product: Product):
+    root_id = product.parent_product_id or product.id
+    return db.query(Product).filter(
+        (Product.id == root_id) | (Product.parent_product_id == root_id)
+    )
 
 
 def create_product_version(db: Session, product_id: int, part_ids: list[int], version: str, user_id: int) -> Product:
@@ -59,10 +59,10 @@ def create_product_version(db: Session, product_id: int, part_ids: list[int], ve
             parent = assembly_by_id.get(current)
             current = parent.parent_assembly_id if parent else None
 
-    if not _is_first_version(source.version):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Create a new version from version 1")
+    if source.parent_product_id is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Create a new version from the first product only")
     label = _clean_version(version)
-    siblings = db.query(Product.version).filter(Product.product_number == source.product_number).all()
+    siblings = version_family_query(db, source).with_entities(Product.version).all()
     if any(str(existing or "").strip().lower() == label.lower() for (existing,) in siblings):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This version already exists")
     created = Product(
@@ -70,6 +70,7 @@ def create_product_version(db: Session, product_id: int, part_ids: list[int], ve
         product_name=source.product_name,
         quantity=source.quantity,
         version=label,
+        parent_product_id=source.id,
         description=source.description,
         created_by=user_id,
     )

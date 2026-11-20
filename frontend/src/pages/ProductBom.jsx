@@ -45,9 +45,8 @@ function fileKind(document) {
   return (document.file_type || document.file_name?.split('.').pop() || '').toLowerCase()
 }
 
-function isFirstVersion(version) {
-  const text = String(version || '').trim().toLowerCase().replace(/^v/, '')
-  return text === '1'
+function isRootVersion(product) {
+  return product?.parent_product_id == null
 }
 
 function previewKind(document) {
@@ -227,13 +226,11 @@ export function ProductBom() {
   }, [id])
 
   useEffect(() => {
-    const number = hierarchy?.product_number
-    if (!number) return undefined
+    if (!hierarchy?.id) return undefined
     let active = true
-    productsService.getAll().then((data) => {
+    productsService.listVersions(hierarchy.id).then((data) => {
       if (!active) return
-      const items = (Array.isArray(data) ? data : data?.items || [])
-        .filter((product) => product.product_number === number)
+      const items = (Array.isArray(data) ? data : [])
         .sort((left, right) => String(left.version || '').localeCompare(String(right.version || ''), undefined, { numeric: true }))
       setVersions(items)
     }).catch(() => {
@@ -242,7 +239,7 @@ export function ProductBom() {
     return () => {
       active = false
     }
-  }, [hierarchy?.product_number, hierarchy?.id])
+  }, [hierarchy?.id, hierarchy?.parent_product_id])
 
   const loadFile = (documentId) => {
     if (fileCache.current.has(documentId)) return Promise.resolve(fileCache.current.get(documentId))
@@ -778,7 +775,7 @@ export function ProductBom() {
           </select>
           <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">Product</span>
           <NodeMenu>
-            {isAdmin && isFirstVersion(hierarchy.version) && <DropdownMenuItem onClick={() => setVersionOpen(true)}><Copy className="mr-2 h-4 w-4" />Create version</DropdownMenuItem>}
+            {isAdmin && isRootVersion(hierarchy) && <DropdownMenuItem onClick={() => setVersionOpen(true)}><Copy className="mr-2 h-4 w-4" />Create version</DropdownMenuItem>}
             <DropdownMenuItem onClick={() => openAssemblyDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Assembly</DropdownMenuItem>
             <DropdownMenuItem onClick={() => openPartDialog(null)}><Plus className="mr-2 h-4 w-4" />Add Part</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setBulk({ assemblyId: null, title: hierarchy.product_name })}><Upload className="mr-2 h-4 w-4" />Upload Parts</DropdownMenuItem>

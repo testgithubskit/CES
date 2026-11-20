@@ -8,13 +8,13 @@ from app.models.product import Product
 from app.models.assembly import Assembly
 from app.models.part import Part
 from app.models.operation import Operation
-from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
+from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse, ProductVersionItem
 from app.core.dependencies import get_current_user
 from app.core.rbac import require_admin
 from app.models.user import User
 from app.schemas.listing import RecordList
 from app.services.custom_fields import apply_values, catalog, entries_for_entity, pop_custom, with_fields, with_fields_many
-from app.services.product_version import create_product_version
+from app.services.product_version import create_product_version, version_family_query
 from app.storage.minio_service import minio_service
 
 router = APIRouter(prefix="/api/v1/products", tags=["Products"])
@@ -96,6 +96,7 @@ class ProductHierarchy(BaseModel):
     product_name: str
     quantity: int
     version: Optional[str] = None
+    parent_product_id: Optional[int] = None
     description: Optional[str] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
@@ -247,6 +248,22 @@ def delete_product(
     return None
 
 
+@router.get("/{product_id}/versions", response_model=List[ProductVersionItem])
+def list_product_versions(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    rows = version_family_query(db, product).order_by(Product.id.asc()).all()
+    return [
+        ProductVersionItem(id=row.id, version=row.version or "1", parent_product_id=row.parent_product_id)
+        for row in rows
+    ]
+
+
 @router.post("/{product_id}/version", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_version(
     product_id: int,
@@ -390,6 +407,7 @@ def get_product_hierarchy(
         product_name=product.product_name,
         quantity=int(product.quantity),
         version=product.version,
+        parent_product_id=product.parent_product_id,
         description=product.description,
         created_by=product.created_by,
         created_by_name=product.created_by_name,

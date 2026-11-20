@@ -48,11 +48,21 @@ class ProductUpdate(BaseModel):
 
 class ProductResponse(ProductBase):
     id: int
+    parent_product_id: Optional[int] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
     custom_fields: Dict[str, str] = {}
     created_at: datetime
     updated_at: datetime
     
+    class Config:
+        from_attributes = True
+
+
+class ProductVersionItem(BaseModel):
+    id: int
+    version: str
+    parent_product_id: Optional[int] = None
+
     class Config:
         from_attributes = True

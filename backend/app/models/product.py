@@ -11,6 +11,7 @@ class Product(Base, TimestampMixin):
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=1)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="1")
+    parent_product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("product.id", ondelete="SET NULL"), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"), nullable=True)
     
@@ -27,4 +28,5 @@ class Product(Base, TimestampMixin):
     __table_args__ = (
         Index('ix_product_product_number', 'product_number'),
         Index('ix_product_product_name', 'product_name'),
+        Index('ix_product_parent_product_id', 'parent_product_id'),
     )

@@ -51,6 +51,11 @@ export const productsService = {
     return response.data
   },
 
+  listVersions: async (id) => {
+    const response = await apiClient.get(`/api/v1/products/${id}/versions`)
+    return response.data
+  },
+
   listCostHistory: async (id) => {
     const response = await apiClient.get(`/api/v1/products/${id}/cost-history`)
     return response.data
